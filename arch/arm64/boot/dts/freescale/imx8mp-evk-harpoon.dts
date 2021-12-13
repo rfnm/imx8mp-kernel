@@ -11,5 +11,22 @@
 
 &iomuxc {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_i2c3>;
+	pinctrl-0 = <&pinctrl_i2c3>, <&pinctrl_sai3>, <&pinctrl_sai5>;
+
+	pinctrl_sai5: sai5grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_SAI5_RXD1__AUDIOMIX_SAI5_TX_SYNC	0xd6
+			MX8MP_IOMUXC_SAI5_RXD2__AUDIOMIX_SAI5_TX_BCLK	0xd6
+			MX8MP_IOMUXC_SAI5_RXD3__AUDIOMIX_SAI5_TX_DATA00	0xd6
+			MX8MP_IOMUXC_SAI5_RXD0__AUDIOMIX_SAI5_RX_DATA00	0xd6
+		>;
+	};
+};
+
+&sai3 {
+	status = "disabled";
+};
+
+&sai5 {
+	status = "disabled";
 };
