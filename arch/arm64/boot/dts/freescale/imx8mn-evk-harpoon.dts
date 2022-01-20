@@ -1,15 +1,27 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright 2021 NXP
+ * Copyright 2021-2022 NXP
  */
 
 #include "imx8mn-evk-root.dts"
 
 &i2c3 {
-       status = "disabled";
+	status = "disabled";
 };
 
 &iomuxc {
-       pinctrl-names = "default";
-       pinctrl-0 = <&pinctrl_i2c3>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c3>, <&pinctrl_sai5>;
+	pinctrl_sai5: sai5grp {
+		fsl,pins = <
+			MX8MN_IOMUXC_SAI5_RXD1_SAI5_TX_SYNC	0xd6
+			MX8MN_IOMUXC_SAI5_RXD2_SAI5_TX_BCLK	0xd6
+			MX8MN_IOMUXC_SAI5_RXD3_SAI5_TX_DATA0	0xd6
+			MX8MN_IOMUXC_SAI5_RXD0_SAI5_RX_DATA0	0xd6
+		>;
+	};
+};
+
+&sai5 {
+	status = "disabled";
 };
