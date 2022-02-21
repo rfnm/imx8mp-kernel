@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright 2021 NXP
+ * Copyright 2021-2022 NXP
  */
 
 #include "imx8mm-evk-root.dts"
@@ -9,6 +9,22 @@
 	status = "disabled";
 };
 
+&sai1 {
+	status = "disabled";
+};
+
+&sai2 {
+	status = "disabled";
+};
+
+&sai3 {
+	status = "disabled";
+};
+
 &sai5 {
+	status = "disabled";
+};
+
+&sai6 {
 	status = "disabled";
 };
