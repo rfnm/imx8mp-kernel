@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright 2020 NXP
+ * Copyright 2020-2022 NXP
  */
 
 #include "imx8mn-evk.dts"
@@ -72,6 +72,11 @@
 			MX8MN_IOMUXC_UART4_TXD_UART4_DCE_TX	0x140
 		>;
 	};
+};
+
+&{/busfreq} {
+	/* Disable busfreq, to avoid 1st Linux busfreq crash other inmates */
+	status = "disabled";
 };
 
 &clk {
