@@ -4,6 +4,7 @@
  */
 
 #include "imx8mm-evk-root.dts"
+#include "imx8mm-rpmsg-ca53.dtsi"
 
 &i2c3 {
 	status = "disabled";
