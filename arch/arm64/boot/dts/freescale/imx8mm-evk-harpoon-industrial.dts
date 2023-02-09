@@ -4,7 +4,7 @@
  */
 
 #include "imx8mm-evk-root.dts"
-#include "imx8m-rpmsg-ca53.dtsi"
+#include "imx8mm-rpmsg-ca53.dtsi"
 
 &fec1 {
 	status = "disabled";

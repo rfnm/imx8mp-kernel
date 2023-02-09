@@ -3,7 +3,7 @@
  * Copyright 2022-2023 NXP
  */
 
-#include "imx8m-generic-mbox.dtsi"
+#include "imx8mm-generic-mbox.dtsi"
 
 / {
 	reserved-memory {

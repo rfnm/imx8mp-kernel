@@ -5,7 +5,7 @@
 
 /dts-v1/;
 #include "imx8mm-evk.dts"
-#include "imx8m-rpmsg-ca53.dtsi"
+#include "imx8mm-rpmsg-ca53.dtsi"
 
 / {
 	reserved-memory {

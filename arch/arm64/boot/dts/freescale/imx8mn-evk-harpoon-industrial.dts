@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright 2022 NXP
+ * Copyright 2023 NXP
  */
 
 #include "imx8mn-evk-root.dts"
+#include "imx8mn-rpmsg-ca53.dtsi"
 
 &fec1 {
 	status = "disabled";
