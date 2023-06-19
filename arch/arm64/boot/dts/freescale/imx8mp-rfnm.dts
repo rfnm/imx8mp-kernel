@@ -155,6 +155,11 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c1>;
 	status = "okay";
+	
+	tmp102@48{
+		compatible = "ti,tmp102";
+		reg = <0x48>;
+	};
 
 	pmic@25 {
 		compatible = "nxp,pca9450c";
