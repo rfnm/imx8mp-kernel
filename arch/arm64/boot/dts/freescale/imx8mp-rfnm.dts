@@ -77,6 +77,12 @@
 	};
 };
 
+&gpio2 {
+	gpio-line-names = 
+		"gpio2_0",
+		"etc",
+};
+
 
 
 &A53_0 {
@@ -364,6 +370,8 @@
 
 
 
+
+
 &snvs_pwrkey {
 	status = "okay";
 };
@@ -413,135 +421,58 @@
 		};
 		
         pinctrl_eqos: eqosgrp {
-/*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-pinctrl_eqos:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list:
-  - {pin_num: AH28, peripheral: ENET_QOS, signal: enet_qos_mdc, pin_signal: ENET_MDC, PE: Disabled}
-  - {pin_num: AH29, peripheral: ENET_QOS, signal: enet_qos_mdio, pin_signal: ENET_MDIO, PE: Disabled}
-  - {pin_num: AF24, peripheral: ENET_QOS, signal: enet_qos_rgmii_tx_ctl, pin_signal: ENET_TX_CTL, PE: Disabled, FSEL: Fast, DSE: X6}
-  - {pin_num: AE24, peripheral: ENET_QOS, signal: enet_qos_rgmii_txc, pin_signal: ENET_TXC, PE: Disabled, FSEL: Fast, DSE: X6}
-  - {pin_num: AC25, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_td, 0', pin_signal: ENET_TD0, PE: Disabled, FSEL: Fast, DSE: X6}
-  - {pin_num: AE26, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_td, 1', pin_signal: ENET_TD1, PE: Disabled, FSEL: Fast, DSE: X6}
-  - {pin_num: AF26, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_td, 2', pin_signal: ENET_TD2, PE: Disabled, FSEL: Fast, DSE: X6}
-  - {pin_num: AD24, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_td, 3', pin_signal: ENET_TD3, PE: Disabled, FSEL: Fast, DSE: X6}
-  - {pin_num: AE28, peripheral: ENET_QOS, signal: enet_qos_rgmii_rx_ctl, pin_signal: ENET_RX_CTL, PE: Disabled, FSEL: Fast, DSE: X4, SION: ENABLED}
-  - {pin_num: AE29, peripheral: ENET_QOS, signal: enet_qos_rgmii_rxc, pin_signal: ENET_RXC, PE: Disabled, FSEL: Fast, DSE: X4}
-  - {pin_num: AG29, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_rd, 0', pin_signal: ENET_RD0, PE: Disabled, FSEL: Fast, DSE: X4}
-  - {pin_num: AG28, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_rd, 1', pin_signal: ENET_RD1, PE: Disabled, FSEL: Fast, DSE: X4}
-  - {pin_num: AF29, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_rd, 2', pin_signal: ENET_RD2, PE: Disabled, FSEL: Fast, DSE: X4}
-  - {pin_num: AF28, peripheral: ENET_QOS, signal: 'enet_qos_rgmii_rd, 3', pin_signal: ENET_RD3, PE: Disabled, FSEL: Fast, DSE: X4}
-  - {pin_num: AC18, peripheral: GPIO5, signal: 'gpio_io, 05', pin_signal: SPDIF_EXT_CLK, direction: OUTPUT, PUE: Weak_Pull_Up, ODE: Open_Drain_Disable}
-  - {pin_num: AH17, peripheral: GPIO4, signal: 'gpio_io, 21', pin_signal: SAI2_RXFS}
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
+
             fsl,pins = <
                 MX8MP_IOMUXC_ENET_MDC__ENET_QOS_MDC	0x3
-			MX8MP_IOMUXC_ENET_MDIO__ENET_QOS_MDIO	0x3
-			MX8MP_IOMUXC_ENET_RD0__ENET_QOS_RGMII_RD0	0x91
-			MX8MP_IOMUXC_ENET_RD1__ENET_QOS_RGMII_RD1	0x91
-			MX8MP_IOMUXC_ENET_RD2__ENET_QOS_RGMII_RD2	0x91
-			MX8MP_IOMUXC_ENET_RD3__ENET_QOS_RGMII_RD3	0x91
-			MX8MP_IOMUXC_ENET_RXC__CCM_ENET_QOS_CLOCK_GENERATE_RX_CLK	0x91
-			MX8MP_IOMUXC_ENET_RX_CTL__ENET_QOS_RGMII_RX_CTL	0x91
-			MX8MP_IOMUXC_ENET_TD0__ENET_QOS_RGMII_TD0		0x1f
-			MX8MP_IOMUXC_ENET_TD1__ENET_QOS_RGMII_TD1		0x1f
-			MX8MP_IOMUXC_ENET_TD2__ENET_QOS_RGMII_TD2		0x1f
-			MX8MP_IOMUXC_ENET_TD3__ENET_QOS_RGMII_TD3		0x1f
-			MX8MP_IOMUXC_ENET_TX_CTL__ENET_QOS_RGMII_TX_CTL	0x1f
-			MX8MP_IOMUXC_ENET_TXC__CCM_ENET_QOS_CLOCK_GENERATE_TX_CLK	0x1f
-			MX8MP_IOMUXC_SPDIF_EXT_CLK__GPIO5_IO05		0x19
+				MX8MP_IOMUXC_ENET_MDIO__ENET_QOS_MDIO	0x3
+				MX8MP_IOMUXC_ENET_RD0__ENET_QOS_RGMII_RD0	0x91
+				MX8MP_IOMUXC_ENET_RD1__ENET_QOS_RGMII_RD1	0x91
+				MX8MP_IOMUXC_ENET_RD2__ENET_QOS_RGMII_RD2	0x91
+				MX8MP_IOMUXC_ENET_RD3__ENET_QOS_RGMII_RD3	0x91
+				MX8MP_IOMUXC_ENET_RXC__CCM_ENET_QOS_CLOCK_GENERATE_RX_CLK	0x91
+				MX8MP_IOMUXC_ENET_RX_CTL__ENET_QOS_RGMII_RX_CTL	0x91
+				MX8MP_IOMUXC_ENET_TD0__ENET_QOS_RGMII_TD0		0x1f
+				MX8MP_IOMUXC_ENET_TD1__ENET_QOS_RGMII_TD1		0x1f
+				MX8MP_IOMUXC_ENET_TD2__ENET_QOS_RGMII_TD2		0x1f
+				MX8MP_IOMUXC_ENET_TD3__ENET_QOS_RGMII_TD3		0x1f
+				MX8MP_IOMUXC_ENET_TX_CTL__ENET_QOS_RGMII_TX_CTL	0x1f
+				MX8MP_IOMUXC_ENET_TXC__CCM_ENET_QOS_CLOCK_GENERATE_TX_CLK	0x1f
+				MX8MP_IOMUXC_SPDIF_EXT_CLK__GPIO5_IO05		0x19
             >;
         };
-        init_usdhc_pins: init_usdhc_pinsgrp {              /*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-init_usdhc_pins:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list: []
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
+        init_usdhc_pins: init_usdhc_pinsgrp {             
+
             fsl,pins = <
             >;
         };
-        pinctrl_uart2: uart2grp {                          /*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-pinctrl_uart2:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list:
-  - {pin_num: V28, peripheral: UART2, signal: uart_rx, pin_signal: SD1_DATA3}
-  - {pin_num: V29, peripheral: UART2, signal: uart_tx, pin_signal: SD1_DATA2}
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
+        pinctrl_uart2: uart2grp {                   
+
             fsl,pins = <
                 MX8MP_IOMUXC_SD1_DATA2__UART2_DCE_TX       0x00000106
                 MX8MP_IOMUXC_SD1_DATA3__UART2_DCE_RX       0x00000106
             >;
         };
-        pinctrl_i2c1: i2c1grp {                            /*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-pinctrl_i2c1:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list:
-  - {pin_num: AC8, peripheral: I2C1, signal: i2c_scl, pin_signal: I2C1_SCL}
-  - {pin_num: AH7, peripheral: I2C1, signal: i2c_sda, pin_signal: I2C1_SDA}
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
+        pinctrl_i2c1: i2c1grp {    
+
             fsl,pins = <
                 MX8MP_IOMUXC_I2C1_SCL__I2C1_SCL            0x400001c2
                 MX8MP_IOMUXC_I2C1_SDA__I2C1_SDA            0x400001c2
             >;
         };
-        init_ecspi_pins: init_ecspi_pinsgrp {              /*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-init_ecspi_pins:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list: []
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
+        init_ecspi_pins: init_ecspi_pinsgrp {             
+
             fsl,pins = <
             >;
         };
-        init_gpio_pins: init_gpio_pinsgrp {                /*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-init_gpio_pins:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list: []
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
-            fsl,pins = <
-            >;
-        };
-        pinctrl_wdog: wdoggrp {                            /*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-pinctrl_wdog:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list:
-  - {pin_num: B6, peripheral: WDOG1, signal: wdog_wdog_b, pin_signal: GPIO1_IO02, PE: Enabled, HYS: CMOS, PUE: Weak_Pull_Up, ODE: Open_Drain_Enable, FSEL: Slow, DSE: X6,
-    SION: DISABLED}
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
+        
+        pinctrl_wdog: wdoggrp {                        
+
             fsl,pins = <
                 MX8MP_IOMUXC_GPIO1_IO02__WDOG1_WDOG_B      0x00000166
             >;
         };
-        pinctrl_pmic: pmicgrp {                            /*!< Function assigned for the core: Cortex-A53[a53_0] */
-/*
- * TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-pinctrl_pmic:
-- options: {callFromInitBoot: 'false', coreID: a53_0}
-- pin_list:
-  - {pin_num: D6, peripheral: GPIO1, signal: 'gpio_io, 03', pin_signal: GPIO1_IO03, direction: INPUT, PE: Enabled, HYS: Schmitt, PUE: Weak_Pull_Up, FSEL: Slow, DSE: X1,
-    SION: DISABLED}
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS ***********
- */
+        pinctrl_pmic: pmicgrp {                            
+
             fsl,pins = <
                 MX8MP_IOMUXC_GPIO1_IO03__GPIO1_IO03        0x000001C0
             >;
