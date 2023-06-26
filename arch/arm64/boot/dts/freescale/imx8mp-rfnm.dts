@@ -48,6 +48,19 @@
 		status = "okay";
 	};
 	
+	/*
+	rfnm_gpios {
+		compatible = "rfnm,gpio";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_rfnm_gpios>;
+
+		Si5510_PWR_EN {
+			label = "Si5510_PWR_EN";
+			gpios = <&gpio3 16 GPIO_ACTIVE_HIGH>;
+		};
+	};
+	*/
+	
 	
 	usb340: fusb340-sw {
 		// cannot remove compatibile from here, this only works thanks to NXP patches
@@ -80,7 +93,7 @@
 &gpio2 {
 	gpio-line-names = 
 		"gpio2_0",
-		"etc",
+		"etc";
 };
 
 
@@ -225,6 +238,18 @@
 		compatible = "ti,tmp102";
 		reg = <0x48>;
 	};      
+	
+	si5510@58{
+		compatible = "rfnm,si5510";
+		reg = <0x58>;
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_si5510>;
+		si5510-rst-gpios = <&gpio4 20 GPIO_ACTIVE_LOW>;
+		la9310-trst-gpios = <&gpio3 9 GPIO_ACTIVE_LOW>;
+		la9310-hrst-gpios = <&gpio3 14 GPIO_ACTIVE_LOW>;
+		la9310-bootstrap-en-gpios = <&gpio1 8 GPIO_ACTIVE_LOW>;
+	};
       
       
       fusb302: tcpc@22 {
@@ -369,7 +394,55 @@
 };
 
 
+&pcie{
+	//pinctrl-names = "default";
+	//pinctrl-0 = <&pinctrl_pcie>;
+	//disable-gpio = <&gpio2 6 GPIO_ACTIVE_LOW>;
+	//reset-gpio = <&gpio2 7 GPIO_ACTIVE_LOW>;
+	ext_osc = <1>;
+	clocks = <&clk IMX8MP_CLK_HSIO_ROOT>,
+		 <&clk IMX8MP_CLK_PCIE_AUX>,
+		 <&clk IMX8MP_CLK_HSIO_AXI>,
+		 <&clk IMX8MP_CLK_PCIE_ROOT>;
+	clock-names = "pcie", "pcie_aux", "pcie_phy", "pcie_bus";
+	assigned-clocks = <&clk IMX8MP_CLK_HSIO_AXI>,
+			  <&clk IMX8MP_CLK_PCIE_AUX>;
+	assigned-clock-rates = <500000000>, <10000000>;
+	assigned-clock-parents = <&clk IMX8MP_SYS_PLL2_500M>,
+				 <&clk IMX8MP_SYS_PLL2_50M>;
+	l1ss-disabled;
+	status = "okay";
+/*
+	wifi_wake_host {
+		compatible = "nxp,wifi-wake-host";
+		interrupt-parent = <&gpio5>;
+		interrupts = <21 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-names = "host-wake";
+	};
+*/
+};
 
+&pcie_ep{
+	//pinctrl-names = "default";
+	//pinctrl-0 = <&pinctrl_pcie>;
+	ext_osc = <1>;
+	clocks = <&clk IMX8MP_CLK_HSIO_ROOT>,
+		 <&clk IMX8MP_CLK_PCIE_AUX>,
+		 <&clk IMX8MP_CLK_HSIO_AXI>,
+		 <&clk IMX8MP_CLK_PCIE_ROOT>;
+	clock-names = "pcie", "pcie_aux", "pcie_phy", "pcie_bus";
+	assigned-clocks = <&clk IMX8MP_CLK_HSIO_AXI>,
+			  <&clk IMX8MP_CLK_PCIE_AUX>;
+	assigned-clock-rates = <500000000>, <10000000>;
+	assigned-clock-parents = <&clk IMX8MP_SYS_PLL2_500M>,
+				 <&clk IMX8MP_SYS_PLL2_50M>;
+	status = "disabled";
+};
+
+&pcie_phy{
+	ext_osc = <1>;
+	status = "okay";
+};
 
 
 &snvs_pwrkey {
@@ -407,7 +480,17 @@
 
 
     imx8mp-custom-board {
-    
+    /*
+    	pinctrl_rfnm_gpios: rfnmgpiopctrl {
+    		fsl,pins = <
+				MX8MP_IOMUXC_GPIO1_IO07__GPIO1_IO07        0x00000146
+                MX8MP_IOMUXC_GPIO1_IO10__GPIO1_IO10        0x00000146
+                MX8MP_IOMUXC_GPIO1_IO12__GPIO1_IO12        0x00000146
+                MX8MP_IOMUXC_NAND_READY_B__GPIO3_IO16      0x00000146
+                MX8MP_IOMUXC_SD2_WP__GPIO2_IO20            0x00000146
+			>;
+    	};
+    */
     	pinctrl_typec: typec1grp {
 			fsl,pins = <
 				MX8MP_IOMUXC_SAI2_TXFS__GPIO4_IO24	0x86
@@ -419,6 +502,17 @@
 				MX8MP_IOMUXC_GPIO1_IO09__GPIO1_IO09	0x16
 			>;
 		};
+		
+		pinctrl_si5510: si5510pctrl {
+			fsl,pins = <
+				MX8MP_IOMUXC_SAI1_MCLK__GPIO4_IO20	0x6
+				MX8MP_IOMUXC_NAND_DATA03__GPIO3_IO09	0x6
+				MX8MP_IOMUXC_NAND_DQS__GPIO3_IO14 	0x6
+				MX8MP_IOMUXC_GPIO1_IO08__GPIO1_IO08 	0x6
+			>;
+		};
+		
+		
 		
         pinctrl_eqos: eqosgrp {
 

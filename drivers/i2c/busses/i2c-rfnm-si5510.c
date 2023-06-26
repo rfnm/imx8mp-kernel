@@ -1,0 +1,275 @@
+#include <linux/interrupt.h>
+#include <linux/module.h>
+#include <linux/of_device.h>
+#include <linux/regmap.h>
+
+#include <linux/rfnm-si5510.h>
+#include <linux/printk.h>
+
+
+typedef unsigned char       uint8_t;
+typedef   signed char        int8_t;
+
+void rfnm_si5510_i2c_read(struct i2c_client *client, uint8_t * buf, int cnt) {
+
+	uint8_t CTS[6] = {0xf0, 0x0f};
+	i2c_master_send(client, CTS, 2);
+
+	i2c_master_recv(client, buf, cnt);
+}
+
+void rfnm_si5510_i2c_write(struct i2c_client *client, uint8_t * buf, int cnt) {
+
+	i2c_master_send(client, buf, cnt);
+}
+
+void rfnm_si5510_sio_test(struct i2c_client *client) {
+ uint8_t sio_test_request[5] = { 0xF0, 0x0F, 0x01, 0xAB, 0xCD };
+
+ rfnm_si5510_i2c_write(client, sio_test_request, 5);
+
+ uint8_t i2c_read_buf[100];
+
+ rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 4);
+
+ while (i2c_read_buf[0] != 0x80) {
+	 msleep(10);
+	 rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 4);
+ }
+
+}
+
+void rfnm_si5510_cts(struct i2c_client *client) {
+
+	uint8_t i2c_read_buf[100];
+
+	do {
+		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
+		msleep(10);
+		//printk("%02x\n", i2c_read_buf[0]);
+	} while (i2c_read_buf[0] != 0x80);
+}
+
+int rfnm_si5510_buffsize(struct i2c_client *client) {
+
+	uint8_t i2c_read_buf[100];
+	uint8_t sio_info_request[3] = { 0xF0, 0x0F, 0x02 };
+	rfnm_si5510_i2c_write(client, sio_info_request, 3);
+
+	do {
+		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
+	} while(i2c_read_buf[0] != 0x80);
+
+	int CMD_BUFFER_SIZE = (i2c_read_buf[2] << 8) + i2c_read_buf[1];
+
+	printk("Command buffer size from SIO_INFO: %d\n", CMD_BUFFER_SIZE);
+	return CMD_BUFFER_SIZE;
+}
+
+
+void rfnm_si5510_restart(struct i2c_client *client) {
+
+	uint8_t i2c_read_buf[100];
+	uint8_t restart_request[] = { 0xF0, 0x0F, 0xF0, 0x00 };
+	rfnm_si5510_i2c_write(client, restart_request, 4);
+
+	do {
+
+		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
+
+		//printk("RESTART returned %02x\n", i2c_read_buf[0]);
+
+		msleep(10);
+	} while(i2c_read_buf[0] != 0x80);
+
+	//printk("RESTART Sent.\n");
+}
+
+void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen, int CMD_BUFFER_SIZE) {
+
+	CMD_BUFFER_SIZE -= 10; // margin for command packets
+	uint8_t i2c_read_buf[100];
+	int numberOfChunks = (datalen / CMD_BUFFER_SIZE) + 1;
+
+	int chunkNum;
+
+	uint8_t host_load_command_init[3] = { 0xF0, 0x0F, 0x05 };
+	uint8_t * host_load_command;
+
+	host_load_command = kmalloc(CMD_BUFFER_SIZE + 10, GFP_KERNEL);
+	memcpy(host_load_command, &host_load_command_init[0], 3);
+
+	for (chunkNum = 0; chunkNum < numberOfChunks; ++chunkNum) {
+		int chunkSize = CMD_BUFFER_SIZE;
+		if (chunkNum == numberOfChunks - 1) {
+			chunkSize = datalen % CMD_BUFFER_SIZE;
+		}
+
+		memcpy(&host_load_command[3], &data[chunkNum * CMD_BUFFER_SIZE], CMD_BUFFER_SIZE);
+		rfnm_si5510_i2c_write(client, &host_load_command[0], chunkSize + 3);
+
+		do {
+			rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
+			//printk("CHUNK %d status is %02x\n", chunkNum, i2c_read_buf[0]);
+		} while(i2c_read_buf[0] != 0x80);
+	}
+
+	kfree(host_load_command);
+}
+
+
+static void rfnm_si5510_boot(struct i2c_client *client) {
+
+	uint8_t i2c_read_buf[100];
+	uint8_t boot_request[] = { 0xF0, 0x0F, 0x07 };
+	rfnm_si5510_i2c_write(client, boot_request, 3);
+
+	do {
+		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
+		//printk("BOOT returned %02x\n", i2c_read_buf[0]);
+		msleep(10);
+	} while (i2c_read_buf[0] != 0x80);
+
+	//printk("BOOT Sent.\n");
+}
+
+
+uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
+	uint8_t i2c_read_buf[100];
+
+	uint8_t reference_status_request[] = { 0xF0, 0x0F, 0x16 };
+	rfnm_si5510_i2c_write(client, reference_status_request, 3);
+
+	uint8_t reference_status_response[5];
+
+	do {
+		if (i2c_read_buf[0] == 0x90) {
+			printk("FWERR triggered. See text under Common Errors.\n");
+			while (1) {}
+		}
+		msleep(10);
+		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
+	} while(i2c_read_buf[0] != 0x80);
+
+	// return true if reference PLL is locked, otherwise return false.
+	return (i2c_read_buf[0] == 0x80 & i2c_read_buf[1] == 0x00 & i2c_read_buf[2] == 0 & i2c_read_buf[3] == 0 & i2c_read_buf[4] == 0);
+}
+
+struct gpio_desc *si5510_rst_gpio;
+struct gpio_desc *la9310_trst_gpio;
+struct gpio_desc *la9310_hrst_gpio;
+struct gpio_desc *la9310_bootstrap_en_gpio;
+
+
+
+static int rfnm_si5510_probe(struct i2c_client *client) {
+
+	printk("Starting up Si5510...\n");
+
+	si5510_rst_gpio = devm_gpiod_get(&client->dev, "si5510-rst", GPIOD_OUT_LOW);
+	int error;
+
+	if (IS_ERR(si5510_rst_gpio)) {
+		error = PTR_ERR(si5510_rst_gpio);
+		printk("Failed to get enable gpio: %d\n", error);
+		return error;
+	}
+
+	gpiod_set_value_cansleep(si5510_rst_gpio, 1);
+
+	msleep(10);
+	gpiod_set_value_cansleep(si5510_rst_gpio, 0);
+
+	la9310_trst_gpio = devm_gpiod_get(&client->dev, "la9310-trst", GPIOD_OUT_LOW);
+
+	if (IS_ERR(la9310_trst_gpio)) {
+			error = PTR_ERR(la9310_trst_gpio);
+			printk("Failed to get enable gpio: %d\n", error);
+			return error;
+		}
+
+	la9310_hrst_gpio = devm_gpiod_get(&client->dev, "la9310-hrst", GPIOD_OUT_LOW);
+
+	if (IS_ERR(la9310_hrst_gpio)) {
+		error = PTR_ERR(la9310_hrst_gpio);
+		printk("Failed to get enable gpio: %d\n", error);
+		return error;
+	}
+
+	la9310_bootstrap_en_gpio = devm_gpiod_get(&client->dev, "la9310-bootstrap-en", GPIOD_OUT_LOW);
+
+	if (IS_ERR(la9310_bootstrap_en_gpio)) {
+		error = PTR_ERR(la9310_bootstrap_en_gpio);
+		printk("Failed to get enable gpio: %d\n", error);
+		return error;
+	}
+
+	rfnm_si5510_cts(client);
+
+	rfnm_si5510_sio_test(client);
+
+	int CMD_BUFFER_SIZE = rfnm_si5510_buffsize(client);
+
+	rfnm_si5510_restart(client);
+
+	rfnm_si5510_host_load(client, prod_fw_boot_bin, prod_fw_boot_bin_len, CMD_BUFFER_SIZE);
+	rfnm_si5510_host_load(client, user_config_boot_bin, user_config_boot_bin_len, CMD_BUFFER_SIZE);
+
+	rfnm_si5510_boot(client);
+
+	printk("Waiting for reference clock to lock...\n");
+
+	while(!rfnm_si5510_reference_status(client)) {
+		msleep(10);
+	}
+
+	printk("Si5510 is ready and providing a PCIe clock!\n");
+
+	gpiod_set_value(la9310_hrst_gpio, 1);
+	gpiod_set_value(la9310_trst_gpio, 1);
+
+	gpiod_set_value(la9310_bootstrap_en_gpio, 1);
+
+	msleep(10);
+
+	gpiod_set_value(la9310_hrst_gpio, 0);
+	gpiod_set_value(la9310_trst_gpio, 0);
+
+	msleep(10);
+
+	gpiod_set_value(la9310_bootstrap_en_gpio, 0);
+
+	printk("Performed LA9310 reset\n");
+
+	// release LA9310 GPIOs for people to play with it in userspace (JTAG, etc).
+
+	gpiod_put(la9310_trst_gpio);
+	gpiod_put(la9310_hrst_gpio);
+
+	return 0;
+
+}
+
+
+
+static const struct of_device_id rfnm_si5510_match_table[] = {
+	{ .compatible = "rfnm,si5510", },
+	{}
+};
+MODULE_DEVICE_TABLE(of, rfnm_si5510_match_table);
+
+static const struct i2c_device_id rfnm_si5510_id_table[] = {
+	{ "rfnm_si5510", 0 },
+	{ },
+};
+MODULE_DEVICE_TABLE(i2c, rfnm_si5510_id_table);
+
+static struct i2c_driver rfnm_si5510_driver = {
+	.driver	= {
+		.name	= "rfnm_si5510",
+		.of_match_table = rfnm_si5510_match_table,
+	},
+	.probe_new	= rfnm_si5510_probe,
+	.id_table	= rfnm_si5510_id_table,
+};
+module_i2c_driver(rfnm_si5510_driver);
