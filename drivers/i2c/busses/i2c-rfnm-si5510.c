@@ -160,8 +160,6 @@ struct gpio_desc *la9310_trst_gpio;
 struct gpio_desc *la9310_hrst_gpio;
 struct gpio_desc *la9310_bootstrap_en_gpio;
 
-
-
 static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	printk("Starting up Si5510...\n");

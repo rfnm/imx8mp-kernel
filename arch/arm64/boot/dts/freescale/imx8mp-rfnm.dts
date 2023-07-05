@@ -99,6 +99,11 @@
 		regulator-always-on;
 		status = "okay";
 	};
+	
+	rfnm_wsled {
+		compatible = "rfnm,wsled";
+		status = "okay";
+	};
 };
 
 &gpio2 {
