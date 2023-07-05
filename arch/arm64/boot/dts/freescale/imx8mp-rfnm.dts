@@ -16,6 +16,12 @@
 		stdout-path = &uart2;
 	};
 
+        /* TODO: NLM WDOG Node workaround */
+        la9310_wdog: la9310_wdog@0 {
+                compatible = "la9310_wdog";
+                la9310-reset-gpio = <&gpio4 0 GPIO_ACTIVE_HIGH>;
+        };
+
 
 	memory@40000000 {
 		device_type = "memory";

@@ -208,6 +208,15 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	 */
 	if (sz == 0xffffffff)
 		sz = 0;
+	/* 
+	 * LA9310 device (0x1c12) BAR0 default size 256MB is too large for imx8
+	 * as workaround we map only first 64MB and we will update EP BAR0_MASK
+	 * at runtime before accessing BAR1-5 and avoid Bus Errors
+	 */
+	if((sz<0xfc000000)&&( dev->device==0x1c12)&&(pos==0x10)){
+ 		pci_info(dev,"reg 0x%x: forcing BAR0 readback 0x%08x to 0xfc000000 (i.e.64MB)\n",pos,sz);
+		sz=0xfc000000;
+	}
 
 	/*
 	 * I don't know how l can have all bits set.  Copied from old code.

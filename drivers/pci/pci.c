@@ -6477,7 +6477,8 @@ static resource_size_t pci_specified_resource_alignment(struct pci_dev *dev,
 
 		ret = pci_dev_str_match(dev, p, &p);
 		if (ret == 1) {
-			*resize = true;
+			// fmp if alignment is larger than size, there is no need to resize
+			//*resize = true;
 			align = 1ULL << align_order;
 			break;
 		} else if (ret < 0) {

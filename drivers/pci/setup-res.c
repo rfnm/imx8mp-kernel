@@ -83,6 +83,10 @@ static void pci_std_update_resource(struct pci_dev *dev, int resno)
 		new |= PCI_ROM_ADDRESS_ENABLE;
 	} else
 		return;
+ 
+pci_info(dev, "######BAR %d: update new %#08x current %#08x)\n",
+                        resno, new, check);
+
 
 	/*
 	 * We can't update a 64-bit BAR atomically, so when possible,
@@ -324,7 +328,9 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 		return -EINVAL;
 	}
 
+ 
 	size = resource_size(res);
+
 	ret = _pci_assign_resource(dev, resno, size, align);
 
 	/*
@@ -333,7 +339,7 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 	 * working, which is better than just leaving it disabled.
 	 */
 	if (ret < 0) {
-		pci_info(dev, "BAR %d: no space for %pR\n", resno, res);
+		pci_info(dev, "BAR %d: no space for %pR (%lldMB %lldKB)\n", resno, res,size/1024/1024,size/1024);
 		ret = pci_revert_fw_address(res, dev, resno, size);
 	}
 
@@ -344,7 +350,7 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 
 	res->flags &= ~IORESOURCE_UNSET;
 	res->flags &= ~IORESOURCE_STARTALIGN;
-	pci_info(dev, "BAR %d: assigned %pR\n", resno, res);
+	pci_info(dev, "BAR %d: assigned %pRi (%lldMB %lldKB)\n", resno, res,size/1024/1024,size/1024);
 	if (resno < PCI_BRIDGE_RESOURCES)
 		pci_update_resource(dev, resno);
 
