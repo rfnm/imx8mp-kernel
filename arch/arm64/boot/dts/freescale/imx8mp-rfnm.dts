@@ -135,8 +135,39 @@
 &A53_3 {
 	cpu-supply = <&buck2>;
 };
+/*
+&ecspi1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	fsl,spi-num-chipselects = <1>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ecspi1 &pinctrl_ecspi1_cs>;
+	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
+	status = "okay";
 
+	spidev0: spi@0 {
+		reg = <0>;
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <500000>;
+	};
+};
 
+&ecspi2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	fsl,spi-num-chipselects = <1>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ecspi2 &pinctrl_ecspi2_cs>;
+	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	spidev1: spi@1 {
+		reg = <0>;
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <500000>;
+	};
+};
+*/
 &eqos {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_eqos>;
@@ -248,6 +279,30 @@
 			remote-endpoint = <&typec_dr_sw>;
 		};
 	};
+};
+
+&usb3_phy1 {
+	fsl,phy-tx-vref-tune = <0xe>;
+	fsl,phy-tx-preemp-amp-tune = <3>;
+	fsl,phy-tx-vboost-level = <5>;
+	fsl,phy-comp-dis-tune = <7>;
+	fsl,pcs-tx-deemph-3p5db = <0x21>;
+	fsl,phy-pcs-tx-swing-full = <0x7f>;
+	status = "okay";
+};
+
+&usb3_1 {
+	status = "okay";
+};
+
+&usb_dwc3_1 {
+	dr_mode = "peripheral";
+	hnp-disable;
+	srp-disable;
+	adp-disable;
+	snps,dis-u1-entry-quirk;
+	snps,dis-u2-entry-quirk;
+	status = "okay";
 };
 
 
@@ -562,6 +617,25 @@
 			>;
     	};
     */
+    
+    
+    pinctrl_ecspi1: ecspi1grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_ECSPI1_MISO__ECSPI1_MISO      0x82
+            MX8MP_IOMUXC_ECSPI1_MOSI__ECSPI1_MOSI      0x82
+            MX8MP_IOMUXC_ECSPI1_SCLK__ECSPI1_SCLK      0x82
+            MX8MP_IOMUXC_ECSPI1_SS0__ECSPI1_SS0        0x86
+		>;
+	};
+	
+	pinctrl_ecspi2: ecspi2grp {
+		fsl,pins = <
+			MX8MP_IOMUXC_ECSPI2_MISO__ECSPI2_MISO      0x82
+            MX8MP_IOMUXC_ECSPI2_MOSI__ECSPI2_MOSI      0x82
+            MX8MP_IOMUXC_ECSPI2_SCLK__ECSPI2_SCLK      0x82
+            MX8MP_IOMUXC_ECSPI2_SS0__ECSPI2_SS0        0x86
+		>;
+	};
     
     pinctrl_hdmi: hdmigrp {
     	fsl,pins = <
