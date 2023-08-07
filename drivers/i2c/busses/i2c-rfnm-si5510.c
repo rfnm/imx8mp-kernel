@@ -160,6 +160,9 @@ struct gpio_desc *la9310_trst_gpio;
 struct gpio_desc *la9310_hrst_gpio;
 struct gpio_desc *la9310_bootstrap_en_gpio;
 
+struct gpio_desc *power_en_09_gpio;
+struct gpio_desc *la9310_power_en_gpio;
+
 static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	printk("Starting up Si5510...\n");
@@ -172,11 +175,6 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 		printk("Failed to get enable gpio: %d\n", error);
 		return error;
 	}
-
-	gpiod_set_value_cansleep(si5510_rst_gpio, 1);
-
-	msleep(10);
-	gpiod_set_value_cansleep(si5510_rst_gpio, 0);
 
 	la9310_trst_gpio = devm_gpiod_get(&client->dev, "la9310-trst", GPIOD_OUT_LOW);
 
@@ -194,13 +192,33 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 		return error;
 	}
 
-	la9310_bootstrap_en_gpio = devm_gpiod_get(&client->dev, "la9310-bootstrap-en", GPIOD_OUT_LOW);
+	la9310_bootstrap_en_gpio = devm_gpiod_get(&client->dev, "la9310-bootstrap-en", GPIOD_OUT_HIGH);
 
 	if (IS_ERR(la9310_bootstrap_en_gpio)) {
 		error = PTR_ERR(la9310_bootstrap_en_gpio);
 		printk("Failed to get enable gpio: %d\n", error);
 		return error;
 	}
+
+	power_en_09_gpio = devm_gpiod_get(&client->dev, "09v-power-en", GPIOD_OUT_LOW);
+
+	if (IS_ERR(power_en_09_gpio)) {
+		error = PTR_ERR(power_en_09_gpio);
+		printk("Failed to get enable gpio: %d\n", error);
+		return error;
+	}
+
+	la9310_power_en_gpio = devm_gpiod_get(&client->dev, "la9310-power-en", GPIOD_OUT_LOW);
+
+	if (IS_ERR(la9310_power_en_gpio)) {
+		error = PTR_ERR(la9310_power_en_gpio);
+		printk("Failed to get enable gpio: %d\n", error);
+		return error;
+	}
+
+	gpiod_set_value_cansleep(si5510_rst_gpio, 0);
+	msleep(10);
+	gpiod_set_value_cansleep(si5510_rst_gpio, 1);
 
 	rfnm_si5510_cts(client);
 
@@ -223,19 +241,23 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	printk("Si5510 is ready and providing a PCIe clock!\n");
 
-	gpiod_set_value(la9310_hrst_gpio, 1);
-	gpiod_set_value(la9310_trst_gpio, 1);
-
-	gpiod_set_value(la9310_bootstrap_en_gpio, 1);
-
-	msleep(10);
-
 	gpiod_set_value(la9310_hrst_gpio, 0);
 	gpiod_set_value(la9310_trst_gpio, 0);
 
+	gpiod_set_value(la9310_bootstrap_en_gpio, 0);
+
+	gpiod_set_value(power_en_09_gpio, 1);
+	gpiod_set_value(la9310_power_en_gpio, 1);
+
 	msleep(10);
 
-	gpiod_set_value(la9310_bootstrap_en_gpio, 0);
+	// merge this into single register write?
+	gpiod_set_value(la9310_trst_gpio, 1);
+	gpiod_set_value(la9310_hrst_gpio, 1);
+
+	msleep(10);
+
+	gpiod_set_value(la9310_bootstrap_en_gpio, 1);
 
 	printk("Performed LA9310 reset\n");
 
