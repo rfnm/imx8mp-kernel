@@ -265,6 +265,8 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	gpiod_put(la9310_trst_gpio);
 	gpiod_put(la9310_hrst_gpio);
+	gpiod_put(la9310_bootstrap_en_gpio);
+	gpiod_put(la9310_power_en_gpio);
 
 	return 0;
 
