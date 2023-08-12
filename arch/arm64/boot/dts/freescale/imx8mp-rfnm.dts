@@ -16,17 +16,37 @@
 		stdout-path = &uart2;
 	};
 
-        /* TODO: NLM WDOG Node workaround */
-        /*la9310_wdog: la9310_wdog@0 {
-                compatible = "la9310_wdog";
-                la9310-reset-gpio = <&gpio4 0 GPIO_ACTIVE_HIGH>;
-        };*/
+    la9310_wdog: la9310_wdog@0 {
+        compatible = "la9310_wdog";
+        la9310-trst-gpios = <&gpio3 9 GPIO_ACTIVE_HIGH>;
+		la9310-hrst-gpios = <&gpio3 14 GPIO_ACTIVE_HIGH>;                
+    };
 
 
 	memory@40000000 {
 		device_type = "memory";
 		reg = <0x0 0x40000000 0 0x80000000>;
 	};
+	
+	reserved-memory {
+            /delete-node/ dsp_reserved;
+            /delete-node/ dsp_reserved_heap;
+            /delete-node/ dsp_vdev0vring0;
+            /delete-node/ dsp_vdev0vring1;
+            /delete-node/ dsp_vdev0buffer;
+           // /delete-note/ isp0_reserved;
+			
+			la93: la93@92400000 {
+				reg = <0 0x92400000 0 0x4000000>;
+				no-map;
+			};
+			iqflood: iq@96400000 {
+				reg = <0 0x96400000 0 0x4000000>;
+				//compatible = "shared-dma-pool";
+				no-map;			  
+				//compatible = "removed-dma-pool";
+			};
+    };
 	
 	reg_usdhc2_vmmc: regulator-usdhc2 {
 		compatible = "regulator-fixed";
