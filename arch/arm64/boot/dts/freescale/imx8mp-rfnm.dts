@@ -27,6 +27,7 @@
 		device_type = "memory";
 		reg = <0x0 0x40000000 0 0x80000000>;
 	};
+
 	
 	reserved-memory {
             /delete-node/ dsp_reserved;
@@ -623,6 +624,40 @@
 	status = "okay";
 };
 
+&ecspi1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	fsl,spi-num-chipselects = <1>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ecspi1>;
+	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
+	status = "okay";
+	fsl,spi-csd-ctl = <30>;
+
+	spidev0: spi@0 {
+		reg = <0>;
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <1000000>;
+		fsl,spi-csd-ctl = <30>;
+	};
+};
+
+&ecspi2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	fsl,spi-num-chipselects = <1>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_ecspi2>;
+	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	spidev1: spi@0 {
+		reg = <0>;
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <500000>;
+	};
+};
+
 
 &iomuxc {
     pinctrl-names = "default_iomuxc";
@@ -649,6 +684,11 @@
             MX8MP_IOMUXC_ECSPI1_MOSI__ECSPI1_MOSI      0x82
             MX8MP_IOMUXC_ECSPI1_SCLK__ECSPI1_SCLK      0x82
             MX8MP_IOMUXC_ECSPI1_SS0__ECSPI1_SS0        0x86
+
+			MX8MP_IOMUXC_SAI1_RXD4__GPIO4_IO06         0x00000106 // needed for data pin on RBA
+			MX8MP_IOMUXC_SAI1_RXD5__GPIO4_IO07         0x00000106 // needed for data pin on RBA
+			MX8MP_IOMUXC_SAI1_RXD6__GPIO4_IO08         0x00000106 // needed for data pin on RBA
+			MX8MP_IOMUXC_SAI1_RXD7__GPIO4_IO09         0x00000106 // needed for data pin on RBA
 		>;
 	};
 	
