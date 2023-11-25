@@ -146,39 +146,6 @@
 &A53_3 {
 	cpu-supply = <&buck2>;
 };
-/*
-&ecspi1 {
-	#address-cells = <1>;
-	#size-cells = <0>;
-	fsl,spi-num-chipselects = <1>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_ecspi1 &pinctrl_ecspi1_cs>;
-	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
-	status = "okay";
-
-	spidev0: spi@0 {
-		reg = <0>;
-		compatible = "rohm,dh2228fv";
-		spi-max-frequency = <500000>;
-	};
-};
-
-&ecspi2 {
-	#address-cells = <1>;
-	#size-cells = <0>;
-	fsl,spi-num-chipselects = <1>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_ecspi2 &pinctrl_ecspi2_cs>;
-	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
-	status = "okay";
-
-	spidev1: spi@1 {
-		reg = <0>;
-		compatible = "rohm,dh2228fv";
-		spi-max-frequency = <500000>;
-	};
-};
-*/
 &eqos {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_eqos>;
@@ -293,12 +260,8 @@
 };
 
 &usb3_phy1 {
-	fsl,phy-tx-vref-tune = <0xe>;
 	fsl,phy-tx-preemp-amp-tune = <3>;
-	fsl,phy-tx-vboost-level = <5>;
-	fsl,phy-comp-dis-tune = <7>;
-	fsl,pcs-tx-deemph-3p5db = <0x21>;
-	fsl,phy-pcs-tx-swing-full = <0x7f>;
+	fsl,phy-tx-vref-tune = <0xb>;
 	status = "okay";
 };
 
@@ -307,12 +270,9 @@
 };
 
 &usb_dwc3_1 {
-	dr_mode = "peripheral";
-	hnp-disable;
-	srp-disable;
-	adp-disable;
-	snps,dis-u1-entry-quirk;
-	snps,dis-u2-entry-quirk;
+	pinctrl-names = "default";
+	/*pinctrl-0 = <&pinctrl_usb1_vbus>;*/
+	dr_mode = "host";
 	status = "okay";
 };
 
@@ -350,8 +310,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_typec>;
 		reg = <0x22>;
-		interrupt-parent = <&gpio4>;
-        interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		//interrupt-parent = <&gpio4>;
+        //interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		fcs,int_n = <&gpio4 24 GPIO_ACTIVE_HIGH>;
         vbus-supply = <&vbus_typec>;
 
 		port {
@@ -363,13 +324,19 @@
 		usb_con: connector {
 			compatible = "usb-c-connector";
 			label = "USB-C";
+
+			// for some reason, setting power role to sink and removing try-power-role
+			// makes the system feel like it can cut off its own power during boot
+			// creating a loop. I don't understand. But this works, for now.
+			
 			power-role = "sink";
+			try-power-role = "sink";
 			data-role = "device";
-			source-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)>;
-			sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)
-				     PDO_VAR(5000, 20000, 3000)>;
-			op-sink-microwatt = <15000000>;
-			self-powered;
+			//source-pdos = <PDO_FIXED(15000, 3000, PDO_FIXED_USB_COMM)>;
+			sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)>;
+			//	     PDO_FIXED(9000, 2000, PDO_FIXED_USB_COMM)>;
+			op-sink-microwatt = <1000000>;
+			//self-powered;
 
 			ports {
 				#address-cells = <1>;
@@ -630,15 +597,18 @@
 	fsl,spi-num-chipselects = <1>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ecspi1>;
-	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
+	// spi bug in the 5.10 -> 5.15 upgrade that 
+	// resets the CS line in multi-byte transfers for no reasons
+	// fix by telling the driver to use a GPIO as SS
+	
+	cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
 	status = "okay";
-	fsl,spi-csd-ctl = <30>;
+	fsl,spi-csd-ctl = <1>;
 
 	spidev0: spi@0 {
 		reg = <0>;
 		compatible = "rohm,dh2228fv";
 		spi-max-frequency = <1000000>;
-		fsl,spi-csd-ctl = <30>;
 	};
 };
 
@@ -648,7 +618,7 @@
 	fsl,spi-num-chipselects = <1>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ecspi2>;
-	//cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
 	status = "okay";
 
 	spidev1: spi@0 {
@@ -683,7 +653,9 @@
 			MX8MP_IOMUXC_ECSPI1_MISO__ECSPI1_MISO      0x82
             MX8MP_IOMUXC_ECSPI1_MOSI__ECSPI1_MOSI      0x82
             MX8MP_IOMUXC_ECSPI1_SCLK__ECSPI1_SCLK      0x82
-            MX8MP_IOMUXC_ECSPI1_SS0__ECSPI1_SS0        0x86
+            //MX8MP_IOMUXC_ECSPI1_SS0__ECSPI1_SS0        0x86
+			MX8MP_IOMUXC_ECSPI1_SS0__GPIO5_IO09		0x00000106
+
 
 			MX8MP_IOMUXC_SAI1_RXD4__GPIO4_IO06         0x00000106 // needed for data pin on RBA
 			MX8MP_IOMUXC_SAI1_RXD5__GPIO4_IO07         0x00000106 // needed for data pin on RBA
@@ -697,7 +669,8 @@
 			MX8MP_IOMUXC_ECSPI2_MISO__ECSPI2_MISO      0x82
             MX8MP_IOMUXC_ECSPI2_MOSI__ECSPI2_MOSI      0x82
             MX8MP_IOMUXC_ECSPI2_SCLK__ECSPI2_SCLK      0x82
-            MX8MP_IOMUXC_ECSPI2_SS0__ECSPI2_SS0        0x86
+            //MX8MP_IOMUXC_ECSPI2_SS0__ECSPI2_SS0        0x86
+			MX8MP_IOMUXC_ECSPI2_SS0__GPIO5_IO13			0x00000106
 		>;
 	};
     
@@ -711,7 +684,7 @@
     };
     	pinctrl_typec: typec1grp {
 			fsl,pins = <
-				MX8MP_IOMUXC_SAI2_TXFS__GPIO4_IO24	0x86
+				MX8MP_IOMUXC_SAI2_TXFS__GPIO4_IO24	0x26
 			>;
 		};
 	
