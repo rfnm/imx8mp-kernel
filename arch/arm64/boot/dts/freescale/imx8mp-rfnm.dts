@@ -30,13 +30,13 @@
 
 	
 	reserved-memory {
-            /delete-node/ dsp_reserved;
+           /* /delete-node/ dsp_reserved;
             /delete-node/ dsp_reserved_heap;
             /delete-node/ dsp_vdev0vring0;
             /delete-node/ dsp_vdev0vring1;
             /delete-node/ dsp_vdev0buffer;
            // /delete-note/ isp0_reserved;
-			
+			*/
 			la93: la93@92400000 {
 				reg = <0 0x92400000 0 0x4000000>;
 				no-map;
@@ -44,8 +44,12 @@
 			iqflood: iq@96400000 {
 				reg = <0 0x96400000 0 0x4000000>;
 				//compatible = "shared-dma-pool";
-				no-map;			  
+				no-map;
 				//compatible = "removed-dma-pool";
+			};
+			bootconfig: bootconfig@9A400000 {
+				reg = <0 0x92400000 0 0x400000>;
+				no-map;
 			};
     };
 	
