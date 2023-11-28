@@ -48,7 +48,8 @@
 				//compatible = "removed-dma-pool";
 			};
 			bootconfig: bootconfig@9A400000 {
-				reg = <0 0x92400000 0 0x400000>;
+				reg = <0 0x9A400000 0 0x400000>;
+				// uboot was modified to clear this memory (with 0xff)
 				no-map;
 			};
     };
@@ -311,6 +312,12 @@
 		la9310-hrst-gpios = <&gpio3 14 GPIO_ACTIVE_HIGH>;
 		la9310-bootstrap-en-gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;
 	};
+
+	bootconfig@50{
+		compatible = "rfnm,bootconfig";
+		reg = <0x50>;
+		status = "okay";
+	};
       
       
       fusb302: tcpc@22 {
@@ -466,6 +473,12 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c2>;
 	status = "okay";
+
+	bootconfig@50{
+		compatible = "rfnm,bootconfig";
+		reg = <0x50>;
+		status = "okay";
+	};
 };
 
 &i2c3 {
@@ -473,6 +486,12 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c3>;
 	status = "okay";
+
+	bootconfig@50{
+		compatible = "rfnm,bootconfig";
+		reg = <0x50>;
+		status = "okay";
+	};
 };
 
 
