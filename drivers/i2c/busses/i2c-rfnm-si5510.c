@@ -3,9 +3,10 @@
 #include <linux/of_device.h>
 #include <linux/regmap.h>
 
+#include <linux/rfnm-shared.h>
 #include <linux/rfnm-si5510.h>
 #include <linux/printk.h>
-
+#include <linux/i2c.h>
 
 typedef unsigned char       uint8_t;
 typedef   signed char        int8_t;
@@ -46,7 +47,7 @@ void rfnm_si5510_cts(struct i2c_client *client) {
 	do {
 		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
 		msleep(10);
-		//printk("%02x\n", i2c_read_buf[0]);
+		//printk("RFNM: %02x\n", i2c_read_buf[0]);
 	} while (i2c_read_buf[0] != 0x80);
 }
 
@@ -62,7 +63,7 @@ int rfnm_si5510_buffsize(struct i2c_client *client) {
 
 	int CMD_BUFFER_SIZE = (i2c_read_buf[2] << 8) + i2c_read_buf[1];
 
-	printk("Command buffer size from SIO_INFO: %d\n", CMD_BUFFER_SIZE);
+	//printk("RFNM: Command buffer size from SIO_INFO: %d\n", CMD_BUFFER_SIZE);
 	return CMD_BUFFER_SIZE;
 }
 
@@ -77,12 +78,12 @@ void rfnm_si5510_restart(struct i2c_client *client) {
 
 		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
 
-		//printk("RESTART returned %02x\n", i2c_read_buf[0]);
+		//printk("RFNM: RESTART returned %02x\n", i2c_read_buf[0]);
 
 		msleep(10);
 	} while(i2c_read_buf[0] != 0x80);
 
-	//printk("RESTART Sent.\n");
+	//printk("RFNM: RESTART Sent.\n");
 }
 
 void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen, int CMD_BUFFER_SIZE) {
@@ -110,13 +111,15 @@ void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen, 
 
 		do {
 			rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
-			//printk("CHUNK %d status is %02x\n", chunkNum, i2c_read_buf[0]);
+			//printk("RFNM: CHUNK %d status is %02x\n", chunkNum, i2c_read_buf[0]);
 		} while(i2c_read_buf[0] != 0x80);
 	}
 
 	kfree(host_load_command);
 }
 
+extern void rfnm_wsled_send_chain(uint8_t);
+extern void rfnm_wsled_set(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
 
 static void rfnm_si5510_boot(struct i2c_client *client) {
 
@@ -126,11 +129,11 @@ static void rfnm_si5510_boot(struct i2c_client *client) {
 
 	do {
 		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 1);
-		//printk("BOOT returned %02x\n", i2c_read_buf[0]);
+		//printk("RFNM: BOOT returned %02x\n", i2c_read_buf[0]);
 		msleep(10);
 	} while (i2c_read_buf[0] != 0x80);
 
-	//printk("BOOT Sent.\n");
+	//printk("RFNM: BOOT Sent.\n");
 }
 
 
@@ -144,7 +147,7 @@ uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
 
 	do {
 		if (i2c_read_buf[0] == 0x90) {
-			printk("FWERR triggered. See text under Common Errors.\n");
+			printk("RFNM: FWERR triggered. See text under Common Errors.\n");
 			while (1) {}
 		}
 		msleep(10);
@@ -154,6 +157,62 @@ uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
 	// return true if reference PLL is locked, otherwise return false.
 	return (i2c_read_buf[0] == 0x80 & i2c_read_buf[1] == 0x00 & i2c_read_buf[2] == 0 & i2c_read_buf[3] == 0 & i2c_read_buf[4] == 0);
 }
+
+int can_use_si5510_config(struct rfnm_bootconfig *cfg, int daughterboard_1, int daughterboard_2) {
+	if(daughterboard_1 == daughterboard_2) {
+		// relax conditions: only need to match one daughterboard
+		// (to account for missing or unsupported daughterboards)
+		if(
+			(cfg->daughterboard_eeprom[0].board_id == daughterboard_1 && cfg->daughterboard_eeprom[1].board_id == daughterboard_1) || 
+			
+			(cfg->daughterboard_eeprom[0].board_id == daughterboard_1 && (
+				cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_NOT_FOUND || cfg->daughterboard_eeprom[1].board_id == RFNM_DAUGHTERBOARD_BREAKOUT
+			)) || 
+			(cfg->daughterboard_eeprom[1].board_id == daughterboard_1 && (
+				cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_NOT_FOUND || cfg->daughterboard_eeprom[0].board_id == RFNM_DAUGHTERBOARD_BREAKOUT
+			))
+			
+		) {
+			//printk("RFNM: board ids %d %d present %d %d", cfg->daughterboard_eeprom[0].board_id, cfg->daughterboard_eeprom[1].board_id, cfg->daughterboard_present[0], cfg->daughterboard_present[1]);
+			return 1;
+		}
+	} else {
+		if(cfg->daughterboard_eeprom[0].board_id == daughterboard_1 && cfg->daughterboard_eeprom[1].board_id == daughterboard_2) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+void rfnm_si5510_set_output_status(struct i2c_client *client, int output_id, int enable_disable) {
+	uint8_t i2c_read_buf[100];
+	uint8_t send_output_status_request[] = { 0xF0, 0x0F, 0x29, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	uint32_t output_req = output_req = 1 << output_id;
+
+	memcpy(&send_output_status_request[3], &output_req, 4);
+
+	if(enable_disable) {
+		send_output_status_request[7] = 1;
+		//printk("RFNM: Enabling clock output %d\n", output_id);
+	} else {
+		//printk("RFNM: Disabling clock output %d\n", output_id);
+	}
+
+	rfnm_si5510_i2c_write(client, send_output_status_request, 8);
+
+	do {
+		if (i2c_read_buf[0] == 0x90) {
+			printk("RFNM: FWERR triggered. See text under Common Errors.\n");
+			while (1) {}
+		}
+		msleep(10);
+		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
+	} while(i2c_read_buf[0] != 0x80);
+
+
+}
+
 
 struct gpio_desc *si5510_rst_gpio;
 struct gpio_desc *la9310_trst_gpio;
@@ -165,14 +224,27 @@ struct gpio_desc *la9310_power_en_gpio;
 
 static int rfnm_si5510_probe(struct i2c_client *client) {
 
-	printk("Starting up Si5510...\n");
+	struct rfnm_bootconfig *cfg;
+	struct rfnm_eeprom_data *eeprom_data;
+	cfg = memremap(0x9A400000, SZ_4M, MEMREMAP_WB);
+
+	// when rebooted without hard power reset, this memory section doesn't get inited to 0xff...
+	// move memory reset to uboot?
+
+	if(cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_NOT_CHECKED_YET || cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_NOT_CHECKED_YET) {
+		printk("RFNM: Deferring Si5510 probe...\n");
+		memunmap(cfg);
+		return -EPROBE_DEFER;
+	}
+
+	printk("RFNM: Starting up Si5510...\n");
 
 	si5510_rst_gpio = devm_gpiod_get(&client->dev, "si5510-rst", GPIOD_OUT_LOW);
 	int error;
 
 	if (IS_ERR(si5510_rst_gpio)) {
 		error = PTR_ERR(si5510_rst_gpio);
-		printk("Failed to get enable gpio: %d\n", error);
+		printk("RFNM: Failed to get enable gpio: %d\n", error);
 		return error;
 	}
 
@@ -180,7 +252,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if (IS_ERR(la9310_trst_gpio)) {
 			error = PTR_ERR(la9310_trst_gpio);
-			printk("Failed to get enable gpio: %d\n", error);
+			printk("RFNM: Failed to get enable gpio: %d\n", error);
 			return error;
 		}
 
@@ -188,7 +260,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if (IS_ERR(la9310_hrst_gpio)) {
 		error = PTR_ERR(la9310_hrst_gpio);
-		printk("Failed to get enable gpio: %d\n", error);
+		printk("RFNM: Failed to get enable gpio: %d\n", error);
 		return error;
 	}
 
@@ -196,7 +268,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if (IS_ERR(la9310_bootstrap_en_gpio)) {
 		error = PTR_ERR(la9310_bootstrap_en_gpio);
-		printk("Failed to get enable gpio: %d\n", error);
+		printk("RFNM: Failed to get enable gpio: %d\n", error);
 		return error;
 	}
 
@@ -204,7 +276,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if (IS_ERR(power_en_09_gpio)) {
 		error = PTR_ERR(power_en_09_gpio);
-		printk("Failed to get enable gpio: %d\n", error);
+		printk("RFNM: Failed to get enable gpio: %d\n", error);
 		return error;
 	}
 
@@ -212,7 +284,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if (IS_ERR(la9310_power_en_gpio)) {
 		error = PTR_ERR(la9310_power_en_gpio);
-		printk("Failed to get enable gpio: %d\n", error);
+		printk("RFNM: Failed to get enable gpio: %d\n", error);
 		return error;
 	}
 
@@ -229,17 +301,52 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	rfnm_si5510_restart(client);
 
 	rfnm_si5510_host_load(client, prod_fw_boot_bin, prod_fw_boot_bin_len, CMD_BUFFER_SIZE);
-	rfnm_si5510_host_load(client, user_config_boot_bin, user_config_boot_bin_len, CMD_BUFFER_SIZE);
+	rfnm_si5510_host_load(client, Base_Plan_boot_bin, Base_Plan_boot_bin_len, CMD_BUFFER_SIZE);
 
 	rfnm_si5510_boot(client);
 
-	printk("Waiting for reference clock to lock...\n");
+	if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA)) {
+		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
+		printk("RFNM: Selected plan 1 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA\n");
+	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_LIME)) {
+		rfnm_si5510_host_load(client, Q_Plan2_boot_bin, Q_Plan2_boot_bin_len, CMD_BUFFER_SIZE);
+		printk("RFNM: Selected plan 2 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_LIME\n");
+	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_LIME)) {
+		rfnm_si5510_host_load(client, Q_Plan3_boot_bin, Q_Plan3_boot_bin_len, CMD_BUFFER_SIZE);
+		printk("RFNM: Selected plan 3 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_LIME\n");
+	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA)) {
+		rfnm_si5510_host_load(client, Q_Plan4_boot_bin, Q_Plan4_boot_bin_len, CMD_BUFFER_SIZE);
+		printk("RFNM: Selected plan 4 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA\n");
+	} else {
+		printk("RFNM: Couldn't finding Si5510 config to work with the installed daughterboards\n");
+	}
+
+	if(cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
+		rfnm_si5510_set_output_status(client, 12, 1);
+		rfnm_si5510_set_output_status(client, 15, 1);
+		printk("RFNM: Enabling clocks for RBA\n");
+	}
+
+	if(cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[1].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
+		rfnm_si5510_set_output_status(client, 0, 1);
+		rfnm_si5510_set_output_status(client, 2, 1);
+		printk("RFNM: Enabling clocks for RBB\n");
+	}
+
+
+	
+		
+
+
+	printk("RFNM: Waiting for reference clock to lock...\n");
 
 	while(!rfnm_si5510_reference_status(client)) {
 		msleep(10);
 	}
 
-	printk("Si5510 is ready and providing a PCIe clock!\n");
+	printk("RFNM: Si5510 is ready and providing a PCIe clock!\n");
+
+	cfg->pcie_clock_ready = 1;
 
 	gpiod_set_value(la9310_hrst_gpio, 0);
 	gpiod_set_value(la9310_trst_gpio, 0);
@@ -259,7 +366,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	gpiod_set_value(la9310_bootstrap_en_gpio, 1);
 
-	printk("Performed LA9310 reset\n");
+	printk("RFNM: Performed LA9310 reset\n");
 
 	// release LA9310 GPIOs for people to play with it in userspace (JTAG, etc).
 
@@ -267,6 +374,10 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	gpiod_put(la9310_hrst_gpio);
 	gpiod_put(la9310_bootstrap_en_gpio);
 	gpiod_put(la9310_power_en_gpio);
+
+	// cannot load wsled because it's not init'd yet... not sure why the order changed
+	//rfnm_wsled_set(0, 0, 0, 0, 0xff);
+	//rfnm_wsled_send_chain(0);
 
 	return 0;
 
@@ -295,3 +406,4 @@ static struct i2c_driver rfnm_si5510_driver = {
 	.id_table	= rfnm_si5510_id_table,
 };
 module_i2c_driver(rfnm_si5510_driver);
+MODULE_LICENSE("GPL");
