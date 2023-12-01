@@ -42,13 +42,13 @@
 				no-map;
 			};
 			iqflood: iq@96400000 {
-				reg = <0 0x96400000 0 0x4000000>;
+				reg = <0 0x96400000 0 0xD000000>;
 				//compatible = "shared-dma-pool";
 				no-map;
 				//compatible = "removed-dma-pool";
 			};
-			bootconfig: bootconfig@9A400000 {
-				reg = <0 0x9A400000 0 0x400000>;
+			bootconfig: bootconfig@A3400000 {
+				reg = <0 0xA3400000 0 0x400000>;
 				// uboot was modified to clear this memory (with 0xff)
 				no-map;
 			};

@@ -160,7 +160,7 @@ static int rfnm_wsled_probe(struct platform_device *pdev)
 	rfnm_wsled_send_chain(0);
 	rfnm_wsled_send_chain(1);
 
-	printk("RFNM WSLED driver");
+	printk("RFNM: WSLED driver");
 
 	return 0;
 }

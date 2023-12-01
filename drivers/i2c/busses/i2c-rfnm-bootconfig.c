@@ -174,7 +174,7 @@ static int rfnm_bootconfig_probe(struct i2c_client *client) {
 	
 	struct rfnm_bootconfig *cfg;
 	struct rfnm_eeprom_data *eeprom_data;
-	cfg = memremap(0x9A400000, SZ_4M, MEMREMAP_WB); 
+	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB); 
 
 	if(adapter->nr == 0) {
 		eeprom_data = &cfg->motherboard_eeprom;

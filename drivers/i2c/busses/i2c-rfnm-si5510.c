@@ -226,7 +226,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	struct rfnm_bootconfig *cfg;
 	struct rfnm_eeprom_data *eeprom_data;
-	cfg = memremap(0x9A400000, SZ_4M, MEMREMAP_WB);
+	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
 
 	// when rebooted without hard power reset, this memory section doesn't get inited to 0xff...
 	// move memory reset to uboot?

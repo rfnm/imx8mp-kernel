@@ -229,9 +229,9 @@ static int imx8_pcie_phy_probe(struct platform_device *pdev)
 {
 	struct rfnm_bootconfig *cfg;
 	struct rfnm_eeprom_data *eeprom_data;
-	cfg = memremap(0x9A400000, SZ_4M, MEMREMAP_WB);
+	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
 
-	if(cfg->pci_clock_ready == 0xff) {
+	if(cfg->pcie_clock_ready == 0xff) {
 		printk("RFNM: Deferring PCIe probe...\n");
 		memunmap(cfg);
 		return -EPROBE_DEFER;

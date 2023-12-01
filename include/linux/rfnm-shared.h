@@ -9,6 +9,8 @@
 #define RFNM_DAUGHTERBOARD_NOT_FOUND (0x20)
 #define RFNM_DAUGHTERBOARD_NOT_CHECKED_YET (0xff)
 
+#define RFNM_BOOTCONFIG_PHYADDR (0xA3400000)
+
 
 
 struct __attribute__((__packed__)) rfnm_eeprom_data {
