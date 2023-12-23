@@ -318,11 +318,11 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 		rfnm_si5510_host_load(client, Q_Plan4_boot_bin, Q_Plan4_boot_bin_len, CMD_BUFFER_SIZE);
 		printk("RFNM: Selected plan 4 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else {
-		printk("RFNM: Couldn't finding Si5510 config to work with the installed daughterboards\n");
+		printk("RFNM: Couldn't find Si5510 config to work with the installed daughterboards\n");
 	}
 
 	if(cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
-		rfnm_si5510_set_output_status(client, 12, 1);
+		rfnm_si5510_set_output_status(client, 11, 1);
 		rfnm_si5510_set_output_status(client, 15, 1);
 		printk("RFNM: Enabling clocks for RBA\n");
 	}
