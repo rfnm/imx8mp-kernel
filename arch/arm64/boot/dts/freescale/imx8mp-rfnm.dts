@@ -25,7 +25,8 @@
 
 	memory@40000000 {
 		device_type = "memory";
-		reg = <0x0 0x40000000 0 0x80000000>;
+		reg = <0x0 0x40000000 0 0x80000000>,
+		      <0x1 0x00000000 0 0x80000000>;
 	};
 
 	
@@ -479,6 +480,11 @@
 		reg = <0x50>;
 		status = "okay";
 	};
+
+	tmp102@48{
+		compatible = "ti,tmp102";
+		reg = <0x48>;
+	};   
 };
 
 &i2c3 {
@@ -492,6 +498,11 @@
 		reg = <0x50>;
 		status = "okay";
 	};
+
+	tmp102@48{
+		compatible = "ti,tmp102";
+		reg = <0x48>;
+	};   
 };
 
 
@@ -639,7 +650,9 @@
 	// spi bug in the 5.10 -> 5.15 upgrade that 
 	// resets the CS line in multi-byte transfers for no reasons
 	// fix by telling the driver to use a GPIO as SS
-	
+
+	//num-cs = <2>; 
+	//cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>, <&gpio3 22 GPIO_ACTIVE_LOW>;
 	cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
 	status = "okay";
 	fsl,spi-csd-ctl = <1>;
@@ -649,8 +662,14 @@
 		compatible = "rohm,dh2228fv";
 		spi-max-frequency = <1000000>;
 	};
-};
 
+	/*spidev1: spi@1 {
+		reg = <1>;
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <1000000>;
+	};*/
+};
+/*
 &ecspi2 {
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -660,13 +679,13 @@
 	cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
 	status = "okay";
 
-	spidev1: spi@0 {
+	spidev3: spi@0 {
 		reg = <0>;
-		compatible = "rohm,dh2228fv";
+		compatible = "spidev";
 		spi-max-frequency = <500000>;
 	};
 };
-
+*/
 
 &iomuxc {
     pinctrl-names = "default_iomuxc";
@@ -701,13 +720,23 @@
             MX8MP_IOMUXC_ECSPI1_MOSI__ECSPI1_MOSI      0x82
             MX8MP_IOMUXC_ECSPI1_SCLK__ECSPI1_SCLK      0x82
             //MX8MP_IOMUXC_ECSPI1_SS0__ECSPI1_SS0        0x86
-			MX8MP_IOMUXC_ECSPI1_SS0__GPIO5_IO09		0x00000106
+			MX8MP_IOMUXC_ECSPI1_SS0__GPIO5_IO09		0x00000106 // SS granita
+			MX8MP_IOMUXC_SAI5_RXD1__GPIO3_IO22		0x00000106 // SS RFFC
 
+			MX8MP_IOMUXC_SAI5_RXD0__GPIO3_IO21		0x00000106 // RFFC NRST pin
 
 			MX8MP_IOMUXC_SAI1_RXD4__GPIO4_IO06         0x00000106 // needed for data pin on RBA
 			MX8MP_IOMUXC_SAI1_RXD5__GPIO4_IO07         0x00000106 // needed for data pin on RBA
 			MX8MP_IOMUXC_SAI1_RXD6__GPIO4_IO08         0x00000106 // needed for data pin on RBA
 			MX8MP_IOMUXC_SAI1_RXD7__GPIO4_IO09         0x00000106 // needed for data pin on RBA
+
+			MX8MP_IOMUXC_SAI1_RXFS__GPIO4_IO00         0x00000106
+			MX8MP_IOMUXC_SAI1_RXC__GPIO4_IO01          0x00000106
+			MX8MP_IOMUXC_SAI1_RXD0__GPIO4_IO02         0x00000106
+			MX8MP_IOMUXC_SAI1_RXD2__GPIO4_IO04         0x00000106
+			MX8MP_IOMUXC_SAI1_RXD3__GPIO4_IO05         0x00000106
+
+
 		>;
 	};
 	
