@@ -214,6 +214,31 @@ void rfnm_si5510_set_output_status(struct i2c_client *client, int output_id, int
 }
 
 
+static ssize_t rfnm_ext_ref_out_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
+
+	struct i2c_client *client = to_i2c_client(dev);
+
+	if(buf[1] != 'n' && buf[1] != 'f') {
+		printk("RFNM: Si5510: Valid inputs are either 'on' or 'off'");
+		return -EINVAL;
+	}
+
+	if(buf[1] == 'n') {
+		printk("RFNM: Si5510: enabling ext reference output @ 10 MHz\n");
+		rfnm_si5510_set_output_status(client, 9, 1);
+	} else {
+		printk("RFNM: Si5510: disabling external reference output\n");
+		rfnm_si5510_set_output_status(client, 9, 0);
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(rfnm_ext_ref_out);
+
+
+
+
 struct gpio_desc *si5510_rst_gpio;
 struct gpio_desc *la9310_trst_gpio;
 struct gpio_desc *la9310_hrst_gpio;
@@ -378,6 +403,14 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	// cannot load wsled because it's not init'd yet... not sure why the order changed
 	//rfnm_wsled_set(0, 0, 0, 0, 0xff);
 	//rfnm_wsled_send_chain(0);
+
+	int err;
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_ext_ref_out);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_ext_ref_out");
+	}
+	//device_remove_file(&client->dev, &(dev_attr_rfnm_show_board_info));
 
 	return 0;
 
