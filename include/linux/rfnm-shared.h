@@ -26,7 +26,8 @@ struct __attribute__((__packed__)) rfnm_eeprom_data {
 // 0xff initial status is only guaranteed by uboot mod in the first 4kB
 struct __attribute__((__packed__)) rfnm_bootconfig {
 	uint8_t daughterboard_present[2];
-  uint8_t pcie_clock_ready;
+  	uint8_t pcie_clock_ready;
+	uint8_t usb_pd_negotiation_in_progress;
 	struct rfnm_eeprom_data motherboard_eeprom;
 	struct rfnm_eeprom_data daughterboard_eeprom[2];
 };
