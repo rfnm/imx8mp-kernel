@@ -66,6 +66,15 @@
 		enable-active-high;
 	};
 
+	rfnm_wsled {
+		compatible = "rfnm,wsled";
+		wsled1-gpios = <&gpio3 7 GPIO_ACTIVE_HIGH>;
+		wsled2-gpios = <&gpio3 8 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_wsled>;
+		status = "okay";
+	};
+
 
 	sound-hdmi {
 		compatible = "fsl,imx-audio-hdmi";
@@ -123,14 +132,7 @@
 		status = "okay";
 	};
 	
-	rfnm_wsled {
-		compatible = "rfnm,wsled";
-		wsled1-gpios = <&gpio3 7 GPIO_ACTIVE_HIGH>;
-		wsled2-gpios = <&gpio3 8 GPIO_ACTIVE_HIGH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_wsled>;
-		status = "okay";
-	};
+	
 };
 
 &gpio2 {
@@ -254,7 +256,7 @@
 };
 
 &usb_dwc3_0 {
-	dr_mode = "peripheral";
+	dr_mode = "otg";
 	hnp-disable;
 	srp-disable;
 	adp-disable;
@@ -286,12 +288,65 @@
 	status = "okay";
 };
 
+&pwm4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_pwm4>;
+	status = "okay";
+};
+
 
 &i2c1 {
 	clock-frequency = <400000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c1>;
 	status = "okay";
+
+
+	fusb302: tcpc@22 {
+		compatible = "fcs,fusb302";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_typec>;
+		reg = <0x22>;
+		//interrupt-parent = <&gpio4>;
+        //interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		fcs,int_n = <&gpio4 24 GPIO_ACTIVE_HIGH>;
+        vbus-supply = <&vbus_typec>;
+
+		port {
+			typec_dr_sw: endpoint {
+				remote-endpoint = <&usb3_drd_sw>;
+			};
+		};
+
+		usb_con: connector {
+			compatible = "usb-c-connector";
+			label = "USB-C";
+			
+			power-role = "sink";
+			try-power-role = "sink";
+			data-role = "dual";
+			//source-pdos = <PDO_FIXED(5000, 2500, PDO_FIXED_USB_COMM)>;
+			sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)
+				     	 PDO_FIXED(9000, 2000, PDO_FIXED_USB_COMM)
+						 PDO_FIXED(12000, 2000, PDO_FIXED_USB_COMM)
+						 PDO_FIXED(15000, 1500, PDO_FIXED_USB_COMM)
+						 PDO_VAR(5000, 15000, 3000)>;
+			op-sink-microwatt = <1000000>;
+			//self-powered;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@1 {
+					reg = <1>;
+					typec_con_ss: endpoint {
+						remote-endpoint = <&usb3_data_ss>;
+					};
+				};
+			};
+		};
+	};
 	
 	tmp102@48{
 		compatible = "ti,tmp102";
@@ -321,52 +376,7 @@
 	};
       
       
-      fusb302: tcpc@22 {
-		compatible = "fcs,fusb302";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_typec>;
-		reg = <0x22>;
-		//interrupt-parent = <&gpio4>;
-        //interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
-		fcs,int_n = <&gpio4 24 GPIO_ACTIVE_HIGH>;
-        vbus-supply = <&vbus_typec>;
-
-		port {
-			typec_dr_sw: endpoint {
-				remote-endpoint = <&usb3_drd_sw>;
-			};
-		};
-
-		usb_con: connector {
-			compatible = "usb-c-connector";
-			label = "USB-C";
-
-			// for some reason, setting power role to sink and removing try-power-role
-			// makes the system feel like it can cut off its own power during boot
-			// creating a loop. I don't understand. But this works, for now.
-			
-			power-role = "sink";
-			try-power-role = "sink";
-			data-role = "device";
-			//source-pdos = <PDO_FIXED(15000, 3000, PDO_FIXED_USB_COMM)>;
-			sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)>;
-			//	     PDO_FIXED(9000, 2000, PDO_FIXED_USB_COMM)>;
-			op-sink-microwatt = <1000000>;
-			//self-powered;
-
-			ports {
-				#address-cells = <1>;
-				#size-cells = <0>;
-
-				port@1 {
-					reg = <1>;
-					typec_con_ss: endpoint {
-						remote-endpoint = <&usb3_data_ss>;
-					};
-				};
-			};
-		};
-	};
+    
 	
 	
 	
@@ -725,12 +735,14 @@
 
 			MX8MP_IOMUXC_SAI5_RXD0__GPIO3_IO21		0x00000106 // RFFC NRST pin
 
+			MX8MP_IOMUXC_SD1_DATA4__GPIO2_IO06         0x00000146 // PGOOD_5V with weak pullup
+
 			MX8MP_IOMUXC_SAI1_RXD4__GPIO4_IO06         0x00000106 // needed for data pin on RBA
 			MX8MP_IOMUXC_SAI1_RXD5__GPIO4_IO07         0x00000106 // needed for data pin on RBA
 			MX8MP_IOMUXC_SAI1_RXD6__GPIO4_IO08         0x00000106 // needed for data pin on RBA
 			MX8MP_IOMUXC_SAI1_RXD7__GPIO4_IO09         0x00000106 // needed for data pin on RBA
 
-			MX8MP_IOMUXC_SAI1_RXFS__GPIO4_IO00         0x00000106
+			MX8MP_IOMUXC_SAI1_RXFS__GPIO4_IO00         0x00000006
 			MX8MP_IOMUXC_SAI1_RXC__GPIO4_IO01          0x00000106
 			MX8MP_IOMUXC_SAI1_RXD0__GPIO4_IO02         0x00000106
 			MX8MP_IOMUXC_SAI1_RXD2__GPIO4_IO04         0x00000106
@@ -767,6 +779,13 @@
 		pinctrl_typec_mux: typec1muxgrp {
 			fsl,pins = <
 				MX8MP_IOMUXC_GPIO1_IO09__GPIO1_IO09	0x16
+			>;
+		};
+
+		pinctrl_pwm4: pwm4grp {
+			fsl,pins = <
+				//MX8MP_IOMUXC_GPIO1_IO15__PWM4_OUT          0x00000026
+				MX8MP_IOMUXC_SAI3_MCLK__PWM4_OUT           0x00000016
 			>;
 		};
 		
@@ -906,8 +925,8 @@
         pinctrl_uart2: uart2grp {                   
 
             fsl,pins = <
-                MX8MP_IOMUXC_SD1_DATA2__UART2_DCE_TX       0x00000106
-                MX8MP_IOMUXC_SD1_DATA3__UART2_DCE_RX       0x00000106
+                MX8MP_IOMUXC_SD1_DATA2__UART2_DCE_TX       0x00000146
+                MX8MP_IOMUXC_SD1_DATA3__UART2_DCE_RX       0x00000146
             >;
         };
         pinctrl_i2c1: i2c1grp {    
