@@ -8,6 +8,9 @@
 #include <linux/printk.h>
 #include <linux/i2c.h>
 
+#include <linux/ktime.h>
+
+
 typedef unsigned char       uint8_t;
 typedef   signed char        int8_t;
 
@@ -155,6 +158,7 @@ uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
 	} while(i2c_read_buf[0] != 0x80);
 
 	// return true if reference PLL is locked, otherwise return false.
+	// why & and not &&???
 	return (i2c_read_buf[0] == 0x80 & i2c_read_buf[1] == 0x00 & i2c_read_buf[2] == 0 & i2c_read_buf[3] == 0 & i2c_read_buf[4] == 0);
 }
 
@@ -256,9 +260,22 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	// when rebooted without hard power reset, this memory section doesn't get inited to 0xff...
 	// move memory reset to uboot?
 
-	if(cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_NOT_CHECKED_YET || cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_NOT_CHECKED_YET) {
+	// remove pd negotiation workaround: it gets stuck sometimes (non-PD connected, times out)
+
+	if(	//cfg->usb_pd_negotiation_in_progress == 1 || 
+		cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_NOT_CHECKED_YET || 
+		cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_NOT_CHECKED_YET) {
 		printk("RFNM: Deferring Si5510 probe...\n");
 		memunmap(cfg);
+		return -EPROBE_DEFER;
+	}
+
+	s64  uptime_ms;
+    uptime_ms = ktime_to_ms(ktime_get_boottime());
+
+	if(uptime_ms < 1000) {
+		// complete hack: most PD devices are going to keep probing between 0.7-1 second, so do not start there...
+		printk("RFNM: Deferring Si5510 probe...\n");
 		return -EPROBE_DEFER;
 	}
 
@@ -348,13 +365,17 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if(cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
 		rfnm_si5510_set_output_status(client, 11, 1);
-		rfnm_si5510_set_output_status(client, 15, 1);
+		if(cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_LIME) {
+			rfnm_si5510_set_output_status(client, 15, 1);
+		}
 		printk("RFNM: Enabling clocks for RBA\n");
 	}
 
 	if(cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[1].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
 		rfnm_si5510_set_output_status(client, 0, 1);
-		rfnm_si5510_set_output_status(client, 2, 1);
+		if(cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_LIME) {
+			rfnm_si5510_set_output_status(client, 2, 1);
+		}
 		printk("RFNM: Enabling clocks for RBB\n");
 	}
 
