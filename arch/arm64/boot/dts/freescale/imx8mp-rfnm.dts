@@ -287,13 +287,13 @@
 	dr_mode = "host";
 	status = "okay";
 };
-
+/*
 &pwm4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pwm4>;
 	status = "okay";
 };
-
+*/
 
 &i2c1 {
 	clock-frequency = <400000>;
@@ -667,11 +667,23 @@
 	status = "okay";
 	fsl,spi-csd-ctl = <1>;
 
-	spidev0: spi@0 {
+	/*spidev0: spi@0 {
 		reg = <0>;
 		compatible = "rohm,dh2228fv";
 		spi-max-frequency = <1000000>;
+	};*/
+
+	spirfnmdaghterboard1: spi@0 {
+		reg = <0>;
+		compatible = "rfnm,daughterboard";
+		spi-max-frequency = <1000000>;
 	};
+/*
+	spilime0: spi@0 {
+		reg = <0>;
+		compatible = "rfnm,lime";
+		spi-max-frequency = <1000000>;
+	};*/
 
 	/*spidev1: spi@1 {
 		reg = <1>;
@@ -679,7 +691,7 @@
 		spi-max-frequency = <1000000>;
 	};*/
 };
-/*
+
 &ecspi2 {
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -689,13 +701,19 @@
 	cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
 	status = "okay";
 
-	spidev3: spi@0 {
+	/*spidev3: spi@0 {
 		reg = <0>;
 		compatible = "spidev";
 		spi-max-frequency = <500000>;
+	};*/
+
+	spirfnmdaghterboard2: spi@0 {
+		reg = <0>;
+		compatible = "rfnm,daughterboard";
+		spi-max-frequency = <1000000>;
 	};
 };
-*/
+
 
 &iomuxc {
     pinctrl-names = "default_iomuxc";
@@ -747,6 +765,15 @@
 			MX8MP_IOMUXC_SAI1_RXD0__GPIO4_IO02         0x00000106
 			MX8MP_IOMUXC_SAI1_RXD2__GPIO4_IO04         0x00000106
 			MX8MP_IOMUXC_SAI1_RXD3__GPIO4_IO05         0x00000106
+			
+			MX8MP_IOMUXC_SD1_CLK__GPIO2_IO00			0x00000106
+			MX8MP_IOMUXC_SAI3_MCLK__GPIO5_IO02			0x00000106
+
+			MX8MP_IOMUXC_SAI5_RXD3__GPIO3_IO24			0x00000106
+			MX8MP_IOMUXC_SAI5_RXD1__GPIO3_IO22			0x00000106
+
+			MX8MP_IOMUXC_SAI5_RXD2__GPIO3_IO23			0x00000106
+			MX8MP_IOMUXC_SAI5_MCLK__GPIO3_IO25			0x00000106
 
 
 		>;
@@ -782,12 +809,12 @@
 			>;
 		};
 
-		pinctrl_pwm4: pwm4grp {
+		/*pinctrl_pwm4: pwm4grp {
 			fsl,pins = <
 				//MX8MP_IOMUXC_GPIO1_IO15__PWM4_OUT          0x00000026
 				MX8MP_IOMUXC_SAI3_MCLK__PWM4_OUT           0x00000016
 			>;
-		};
+		};*/
 		
 		pinctrl_si5510: si5510pctrl {
 			fsl,pins = <
