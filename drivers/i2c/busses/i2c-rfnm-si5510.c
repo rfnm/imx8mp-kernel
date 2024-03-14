@@ -364,17 +364,17 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	}
 
 	if(cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
-		rfnm_si5510_set_output_status(client, 11, 1);
+		rfnm_si5510_set_output_status(client, 15, 1);
 		if(cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_LIME) {
-			rfnm_si5510_set_output_status(client, 15, 1);
+			rfnm_si5510_set_output_status(client, 11, 1);
 		}
 		printk("RFNM: Enabling clocks for RBA\n");
 	}
 
 	if(cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[1].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
-		rfnm_si5510_set_output_status(client, 0, 1);
+		rfnm_si5510_set_output_status(client, 2, 1);
 		if(cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_LIME) {
-			rfnm_si5510_set_output_status(client, 2, 1);
+			rfnm_si5510_set_output_status(client, 0, 1);
 		}
 		printk("RFNM: Enabling clocks for RBB\n");
 	}
