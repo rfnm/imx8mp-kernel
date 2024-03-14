@@ -36,8 +36,16 @@ ifeq ($(CONFIG_BROKEN_GAS_INST),y)
 $(warning Detected assembler with broken .inst; disassembly will be unreliable)
 endif
 
-KBUILD_CFLAGS	+= -mgeneral-regs-only	\
-		   $(compat_vdso) $(cc_has_k_constraint)
+$(warning CONFIG_ENABLE_FLOAT_BYPASS is $(CONFIG_ENABLE_FLOAT_BYPASS))
+
+ifeq ($(CONFIG_ENABLE_FLOAT_BYPASS),y)
+$(warning COMPILING WITH FLOAT SUPPORT)
+else
+KBUILD_CFLAGS  += -mgeneral-regs-only
+endif
+
+KBUILD_CFLAGS  += $(compat_vdso) $(cc_has_k_constraint)
+
 KBUILD_CFLAGS	+= $(call cc-disable-warning, psabi)
 KBUILD_AFLAGS	+= $(compat_vdso)
 
