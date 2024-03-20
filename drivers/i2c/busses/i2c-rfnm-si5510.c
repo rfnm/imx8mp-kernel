@@ -109,7 +109,7 @@ void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen, 
 			chunkSize = datalen % CMD_BUFFER_SIZE;
 		}
 
-		memcpy(&host_load_command[3], &data[chunkNum * CMD_BUFFER_SIZE], CMD_BUFFER_SIZE);
+		memcpy(&host_load_command[3], &data[chunkNum * CMD_BUFFER_SIZE], chunkSize);
 		rfnm_si5510_i2c_write(client, &host_load_command[0], chunkSize + 3);
 
 		do {
