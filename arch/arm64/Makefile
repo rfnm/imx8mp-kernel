@@ -36,11 +36,13 @@ ifeq ($(CONFIG_BROKEN_GAS_INST),y)
 $(warning Detected assembler with broken .inst; disassembly will be unreliable)
 endif
 
-$(warning CONFIG_ENABLE_FLOAT_BYPASS is $(CONFIG_ENABLE_FLOAT_BYPASS))
+
 
 ifeq ($(CONFIG_ENABLE_FLOAT_BYPASS),y)
 $(warning COMPILING WITH FLOAT SUPPORT)
+#KBUILD_CFLAGS  += -msoft-float
 else
+$(warning CONFIG_ENABLE_FLOAT_BYPASS is NOT enabled)
 KBUILD_CFLAGS  += -mgeneral-regs-only
 endif
 
