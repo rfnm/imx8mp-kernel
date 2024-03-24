@@ -198,9 +198,9 @@ void rfnm_si5510_set_output_status(struct i2c_client *client, int output_id, int
 
 	if(enable_disable) {
 		send_output_status_request[7] = 1;
-		//printk("RFNM: Enabling clock output %d\n", output_id);
+		printk("RFNM: Enabling clock output %d\n", output_id);
 	} else {
-		//printk("RFNM: Disabling clock output %d\n", output_id);
+		printk("RFNM: Disabling clock output %d\n", output_id);
 	}
 
 	rfnm_si5510_i2c_write(client, send_output_status_request, 8);
@@ -380,8 +380,11 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	}
 
 
+	// enable output 6 by default (GPT1 timer)
+	rfnm_si5510_set_output_status(client, 6, 1);
+	// enable output 8 by default (GPT3 timer)
+	rfnm_si5510_set_output_status(client, 8, 1);
 	
-		
 
 
 	printk("RFNM: Waiting for reference clock to lock...\n");
