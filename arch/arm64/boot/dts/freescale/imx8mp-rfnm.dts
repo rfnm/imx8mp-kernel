@@ -53,7 +53,70 @@
 				// uboot was modified to clear this memory (with 0xff)
 				no-map;
 			};
+
+
+
+
+
+
+			m4_reserved: m4@0x80000000 {
+				no-map;
+				reg = <0 0x80000000 0 0x1000000>;
+			};
+			m7_ddr_alias: m4@0x10000000 {
+				no-map;
+				reg = <0 0x10000000 0 0x1000000>;
+			};
+			m7_itcm: m4@0x7E0000 {
+				no-map;
+				reg = <0 0x7E0000 0 0x20000>;
+			};
+			m7_dtcm: m4@0x800000 {
+				no-map;
+				reg = <0 0x800000 0 0x20000>;
+			};
+
+
+			vdev0vring0: vdev0vring0@55000000 {
+				reg = <0 0x55000000 0 0x8000>;
+				no-map;
+			};
+
+			vdev0vring1: vdev0vring1@55008000 {
+				reg = <0 0x55008000 0 0x8000>;
+				no-map;
+			};
+
+			vdevbuffer: vdevbuffer@55400000 {
+				compatible = "shared-dma-pool";
+				reg = <0 0x55400000 0 0x100000>;
+				no-map;
+			};
+
+			rsc_table: rsc_table@550ff000 {
+				reg = <0 0x550ff000 0 0x1000>;
+				no-map;
+			};
+
+
     };
+
+
+	imx8mp-cm7 {
+		compatible = "fsl,imx8mn-cm7";
+		rsc-da = <0x55000000>;
+		clocks = <&clk IMX8MP_CLK_M7_DIV>;
+		mbox-names = "tx", "rx", "rxdb";
+		mboxes = <&mu 0 1
+			&mu 1 1
+			&mu 3 1>;
+		memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdevbuffer>, <&m4_reserved>, <&m7_ddr_alias>, <&m7_itcm>, <&m7_dtcm>;
+		status = "okay";
+		fsl,startup-delay-ms = <500>;
+
+	//	fsl,rproc-auto-boot = <1>;
+	//	fsl,rproc-fw-name="rfnm_m7_v0.elf";
+	};
 	
 	reg_usdhc2_vmmc: regulator-usdhc2 {
 		compatible = "regulator-fixed";
@@ -72,6 +135,20 @@
 		wsled2-gpios = <&gpio3 8 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_wsled>;
+		status = "okay";
+	};
+
+	rfnm_tti {
+		compatible = "rfnm,imx8mp-tti";
+//		reg = <0x302F0000 0x10000>;
+		interrupts = <GIC_SPI 53 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&clk IMX8MP_CLK_GPT3_ROOT>,
+				<&clk IMX8MP_CLK_GPT3_ROOT>;
+		clock-names = "ipg", "per";
+
+		assigned-clock-parents = <&clk IMX8MP_CLK_24M>;
+		assigned-clocks = <&clk IMX8MP_CLK_GPT3>;
+
 		status = "okay";
 	};
 
@@ -294,6 +371,11 @@
 	status = "okay";
 };
 */
+
+/*&gpt1 {
+	compatible = "fsl,imx8mp-gpt", "fsl,imx6dl-gpt";
+	status = "okay";
+};*/
 
 &i2c1 {
 	clock-frequency = <400000>;
