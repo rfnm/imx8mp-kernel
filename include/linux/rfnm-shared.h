@@ -16,8 +16,16 @@
 
 #define RFNM_PACKED_STRUCT( __Declaration__ ) __Declaration__ __attribute__((__packed__))
 
+#define RFNM_LA_BAR0_PHY_ADDR (0x18000000)
 
 
+#define RFNM_TX (0)
+#define RFNM_RX (1)
+
+
+#define MHZ_TO_HZ * 1000 * 1000ul
+
+/*
 struct rfnm_dgb_tx_ch {
 	int freq;
 	int freq_max;
@@ -52,6 +60,9 @@ struct rfnm_dgb {
 	uint8_t serial_number[9];
 	struct rfnm_dgb_dt *rfnm_dgb_dt;
 };
+*/
+
+
 
 
 struct __attribute__((__packed__)) rfnm_eeprom_data {
@@ -123,22 +134,32 @@ enum rfnm_rf_path {
 	RFNM_PATH_NULL
 };
 
+enum rfnm_ch_enable {
+    RFNM_CH_OFF,
+    RFNM_CH_ON,
+	RFNM_CH_ON_TDD
+};
+
+
 
 
 RFNM_PACKED_STRUCT(
     struct rfnm_api_tx_ch {
 		int8_t abs_id;
+		int8_t dgb_ch_id;
 		int8_t dgb_id;
+		int8_t dac_id;
         int64_t freq_min;
         int64_t freq_max;
-        int64_t freq_cur;
+        int64_t freq;
+		int16_t iq_lpf_bw;
         int16_t samp_freq_div_m;
         int16_t samp_freq_div_n;
         int8_t avail;
-        int8_t active;
         int8_t power;
+		enum rfnm_ch_enable enable;
 		enum rfnm_bias_tee bias_tee;
-		enum rfnm_rf_path path_active;
+		enum rfnm_rf_path path;
 		enum rfnm_rf_path path_possible[10];		
 		enum rfnm_ch_data_type data_type;
     }
@@ -147,18 +168,21 @@ RFNM_PACKED_STRUCT(
 RFNM_PACKED_STRUCT(
     struct rfnm_api_rx_ch {
 		int8_t abs_id;
+		int8_t dgb_ch_id;
 		int8_t dgb_id;
+		int8_t adc_id;
         int64_t freq_min;
         int64_t freq_max;
-        int64_t freq_cur;
+        int64_t freq;
+		int16_t iq_lpf_bw;
         int16_t samp_freq_div_m;
         int16_t samp_freq_div_n;
         int8_t avail;
-        int8_t active;
         int8_t gain;
-        enum rfnm_agc_type agc;
+        enum rfnm_ch_enable enable;
+		enum rfnm_agc_type agc;
 		enum rfnm_bias_tee bias_tee;
-        enum rfnm_rf_path path_active;
+        enum rfnm_rf_path path;
 		enum rfnm_rf_path path_possible[10];		
 		enum rfnm_ch_data_type data_type;
     }
@@ -213,23 +237,64 @@ enum rfnm_control_ep {
 	RFNM_SET_RX_CH_LIST
 };
 
+RFNM_PACKED_STRUCT(
+	struct fe_s {
+		uint32_t latch_val[6];
+		uint32_t latch_val_last_written[6];
+		uint32_t num_latches[7];
+		uint32_t align[1];
+		uint32_t load_order[8];
+	};
+);
+
+struct rfnm_dgb {
+	struct rfnm_api_rx_ch *rx_ch[4];
+	struct rfnm_api_tx_ch *tx_ch[4];
+	struct rfnm_api_rx_ch *rx_s[4];
+	struct rfnm_api_tx_ch *tx_s[4];
+	int rx_ch_cnt;
+	int tx_ch_cnt;
+
+	uint8_t board_id;
+	uint8_t board_revision_id;
+	uint8_t serial_number[9];
+	//struct rfnm_dgb_dt *rfnm_dgb_dt;
 
 
-void rfnm_dgb_reg_rx_ch(int dgb_slot, struct rfnm_dgb_rx_ch * rx_ch);
-void rfnm_dgb_reg_tx_ch(int dgb_slot, struct rfnm_dgb_tx_ch * tx_ch);
-void rfnm_dgb_reg(struct rfnm_dgb_dt *dgb_dt, int dgb_slot, int board_id, int board_revision_id, uint8_t serial_number[9]);
-void rfnm_dgb_unreg(int dgb_slot);
+	struct device dev;
+	//void *priv;
+	int dgb_id;
+	void *priv_drv;
+	//void *priv_fe;
+	struct fe_s fe;
+	struct fe_s fe_tdd[2];
+	void * rx_ch_set;
+	void * rx_ch_get;
+	void * tx_ch_set;
+	void * tx_ch_get;
 
+
+};
+RFNM_PACKED_STRUCT(
+	struct rfnm_m7_dgb {
+		struct fe_s fe;
+		struct fe_s fe_tdd[2];
+		uint32_t m7_tdd_initialized;
+        uint32_t dgb_id;
+        uint32_t tdd_available;
+	} 
+); 
+
+
+void rfnm_dgb_reg_rx_ch(struct rfnm_dgb *dgb_dt, struct rfnm_api_rx_ch * rx_ch, struct rfnm_api_rx_ch * rx_s);
+void rfnm_dgb_reg_tx_ch(struct rfnm_dgb *dgb_dt, struct rfnm_api_tx_ch * tx_ch, struct rfnm_api_tx_ch * tx_s);
+void rfnm_dgb_reg(struct rfnm_dgb *dgb_dt);
+void rfnm_dgb_unreg(struct rfnm_dgb *dgb_dt);
+void rfnm_dgb_en_tdd(struct rfnm_dgb *dgb_dt, struct rfnm_api_tx_ch * tx_ch, struct rfnm_api_rx_ch * rx_ch);
 
 void rfnm_populate_dev_hwinfo(struct rfnm_dev_hwinfo *r_hwinfo);
 
 
-struct rfnm_dgb_dt {
-	struct device dev;
-	void *priv;
-	int daughterboard_id;
-	void *priv_drv;
-};
 
 
 
@@ -244,34 +309,6 @@ struct rfnm_dgb_dt {
 
 
 
-
-
-#define R_DBG_S_PRI_BANK 0
-#define R_DBG_S_PRI_NUM 8
-#define R_DBG_S_SEC_BANK 16
-#define R_DBG_S_SEC_NUM 24
-
-#define RFNM_DGB_GPIO4_0 ((4 << R_DBG_S_PRI_BANK) | (0 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (10 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_1 ((4 << R_DBG_S_PRI_BANK) | (1 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (11 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_2 ((4 << R_DBG_S_PRI_BANK) | (2 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (12 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_3 ((4 << R_DBG_S_PRI_BANK) | (3 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (13 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_4 ((4 << R_DBG_S_PRI_BANK) | (4 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (14 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_5 ((4 << R_DBG_S_PRI_BANK) | (5 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (15 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_6 ((4 << R_DBG_S_PRI_BANK) | (6 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (16 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_7 ((4 << R_DBG_S_PRI_BANK) | (7 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (17 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO5_16 ((5 << R_DBG_S_PRI_BANK) | (16 << R_DBG_S_PRI_NUM) | (5 << R_DBG_S_SEC_BANK) | (17 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO3_21 ((3 << R_DBG_S_PRI_BANK) | (21 << R_DBG_S_PRI_NUM) | (5 << R_DBG_S_SEC_BANK) | (2 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_8 ((4 << R_DBG_S_PRI_BANK) | (8 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (18 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO4_9 ((4 << R_DBG_S_PRI_BANK) | (9 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (19 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO2_3 ((2 << R_DBG_S_PRI_BANK) | (3 << R_DBG_S_PRI_NUM) | (2 << R_DBG_S_SEC_BANK) | (1 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO2_2 ((2 << R_DBG_S_PRI_BANK) | (2 << R_DBG_S_PRI_NUM) | (2 << R_DBG_S_SEC_BANK) | (0 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO3_22 ((3 << R_DBG_S_PRI_BANK) | (22 << R_DBG_S_PRI_NUM) | (3 << R_DBG_S_SEC_BANK) | (24 << R_DBG_S_SEC_NUM))
-#define RFNM_DGB_GPIO3_23 ((3 << R_DBG_S_PRI_BANK) | (23 << R_DBG_S_PRI_NUM) | (3 << R_DBG_S_SEC_BANK) | (25 << R_DBG_S_SEC_NUM))
-
-
-void rfnm_gpio_set(uint8_t dgb_id, uint32_t gpio_map_id);
-void rfnm_gpio_clear(uint8_t dgb_id, uint32_t gpio_map_id);
-void rfnm_gpio_output(uint8_t dgb_id, uint32_t gpio_map_id);
 
 
 #endif
