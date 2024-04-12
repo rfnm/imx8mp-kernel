@@ -401,6 +401,7 @@ struct usb_composite_driver {
 	void			(*suspend)(struct usb_composite_dev *);
 	void			(*resume)(struct usb_composite_dev *);
 	struct usb_gadget_driver		gadget_driver;
+	const char *udc_name;
 };
 
 extern int usb_composite_probe(struct usb_composite_driver *driver);
