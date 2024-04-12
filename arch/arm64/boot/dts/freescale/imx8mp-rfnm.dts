@@ -128,7 +128,18 @@
 		gpio = <&gpio2 19 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
-
+/*
+	usba_vbus: usba_vbus@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-supply";
+//		regulator-min-microvolt = <5000000>;
+//		regulator-max-microvolt = <5000000>;
+		gpio = <&gpio3 16 0>;
+		enable-active-high;
+		regulator-boot-on;
+//		gpio-open-drain;
+	};
+*/
 	rfnm_wsled {
 		compatible = "rfnm,wsled";
 		wsled1-gpios = <&gpio3 7 GPIO_ACTIVE_HIGH>;
@@ -358,19 +369,42 @@
 	status = "okay";
 };
 
-&usb_dwc3_1 {
-	pinctrl-names = "default";
-	/*pinctrl-0 = <&pinctrl_usb1_vbus>;*/
-	dr_mode = "host";
+&usb3_phy1 {
+	vbus-power-supply = <&fusb302>;
 	status = "okay";
 };
-/*
+
+
+
+&usb_dwc3_1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_usba_vbus>;
+	dr_mode = "otg";
+	status = "okay";
+
+	hnp-disable;
+	srp-disable;
+	adp-disable;
+	snps,dis-u1-entry-quirk;
+	snps,dis-u2-entry-quirk;
+
+	
+	usb-role-switch;
+	role-switch-default-mode = "host";
+};
+
+&pwm2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_pwm2>;
+	status = "okay";
+};
+
 &pwm4 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pwm4>;
 	status = "okay";
 };
-*/
+
 
 /*&gpt1 {
 	compatible = "fsl,imx8mp-gpt", "fsl,imx6dl-gpt";
@@ -891,12 +925,23 @@
 			>;
 		};
 
-		/*pinctrl_pwm4: pwm4grp {
+		pinctrl_usba_vbus: usbagrp {
 			fsl,pins = <
-				//MX8MP_IOMUXC_GPIO1_IO15__PWM4_OUT          0x00000026
-				MX8MP_IOMUXC_SAI3_MCLK__PWM4_OUT           0x00000016
+				MX8MP_IOMUXC_NAND_DATA00__GPIO3_IO06           0x00000106
 			>;
-		};*/
+		};
+
+		pinctrl_pwm4: pwm4grp {
+			fsl,pins = <
+				MX8MP_IOMUXC_I2C3_SCL__PWM4_OUT           0x00000016
+			>;
+		};
+
+		pinctrl_pwm2: pwm2grp {
+			fsl,pins = <
+				MX8MP_IOMUXC_GPIO1_IO13__PWM2_OUT           0x00000016
+			>;
+		};
 		
 		pinctrl_si5510: si5510pctrl {
 			fsl,pins = <
