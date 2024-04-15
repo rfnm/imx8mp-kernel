@@ -4,6 +4,7 @@
 #define RFNM_DAUGHTERBOARD_BREAKOUT (1)
 #define RFNM_DAUGHTERBOARD_GRANITA (2)
 #define RFNM_DAUGHTERBOARD_LIME (3)
+#define RFNM_MOTHERBOARD_BLUE (4)
 
 #define RFNM_SLOT_PRIMARY (0)
 #define RFNM_SLOT_SECONDARY (1)
@@ -82,7 +83,8 @@ struct rfnm_dgb {
 
 struct __attribute__((__packed__)) rfnm_eeprom_data {
 	uint8_t magic_header[4];
-	uint8_t pad1[12];
+	uint8_t pad1[6];
+	uint8_t mac_addr[6];
 	uint8_t board_id;
 	uint8_t board_revision_id;
 	uint8_t pad2[5];
