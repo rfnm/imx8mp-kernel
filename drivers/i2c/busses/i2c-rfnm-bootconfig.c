@@ -84,6 +84,8 @@ int rfnm_load_board_info(struct device *dev, struct rfnm_eeprom_data *eeprom_dat
 static ssize_t rfnm_show_board_info_show(struct device *dev, struct device_attribute *attr, char *buf) {
 
 	struct i2c_client *client = to_i2c_client(dev);
+	struct i2c_adapter *adapter = client->adapter;
+	int adapter_nr = i2c_adapter_id(adapter);
 	uint8_t i2cbuf;
 	int z;
 	struct rfnm_eeprom_data eeprom_data;
@@ -91,7 +93,15 @@ static ssize_t rfnm_show_board_info_show(struct device *dev, struct device_attri
 	if(rfnm_load_board_info(dev, &eeprom_data)) {
 		return snprintf(buf, PAGE_SIZE, "Failed to read eeprom\n");
 	} else {
-		return snprintf(buf, PAGE_SIZE, "board id %d revision %d serial %s\n", eeprom_data.board_id, eeprom_data.board_revision_id, eeprom_data.serial_number);
+		if(adapter_nr) {
+			return snprintf(buf, PAGE_SIZE, "board id %d revision %d serial %s\n", eeprom_data.board_id, eeprom_data.board_revision_id, eeprom_data.serial_number);
+		} else {
+			return snprintf(buf, PAGE_SIZE, "board id %d revision %d serial %s mac-addr %02x:%02x:%02x:%02x:%02x:%02x\n", 
+						eeprom_data.board_id, eeprom_data.board_revision_id, eeprom_data.serial_number,
+						eeprom_data.mac_addr[0], eeprom_data.mac_addr[1], eeprom_data.mac_addr[2], eeprom_data.mac_addr[3], eeprom_data.mac_addr[4], eeprom_data.mac_addr[5]);
+		}
+
+		
 	}
 }
 
@@ -100,18 +110,33 @@ static DEVICE_ATTR_RO(rfnm_show_board_info);
 static ssize_t rfnm_factory_use_only_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
 
 	struct i2c_client *client = to_i2c_client(dev);
+	struct i2c_adapter *adapter = client->adapter;
+	int adapter_nr = i2c_adapter_id(adapter);
 
-	if(count != 15) {
-		//printk("RFNM: Invalid length at %d\n", count);
-		return -EINVAL;
+	//01-02-abcdefgh
+	//01-02-abcdefgh-00:00:00:00:00:00
+
+	if(adapter_nr) {
+		if(count != 15) {
+			//printk("RFNM: Invalid length at %d\n", count);
+			return -EINVAL;
+		}
+	} else {
+		if(count != (15 + 18)) {
+			return -EINVAL;
+		}
+
+		if(buf[14] != '-' || buf[17] != ':' || buf[20] != ':' || buf[23] != ':' || buf[26] != ':' || buf[29] != ':') {
+			return -EINVAL;
+		}
 	}
-
+	
 	if(buf[2] != '-' || buf[5] != '-') {
 		//printk("RFNM: invalid chars in string %c %c\n", &buf[2], &buf[5]);
 		return -EINVAL;
 	}
 
-	const char __user tmpstr[10];
+	const char __user tmpstr[20];
 	uint32_t tmpval;
 	struct rfnm_eeprom_data eeprom_data;
 	int i, ret;
@@ -146,6 +171,14 @@ static ssize_t rfnm_factory_use_only_store(struct device *dev, struct device_att
 	memcpy(&eeprom_data.serial_number, &buf[6], 8);
 	eeprom_data.serial_number[8] = 0;
 
+	if(!adapter_nr) {
+		memset(&tmpstr, 0, 20);
+		memcpy(&tmpstr, &buf[15], 17);
+		sscanf(&tmpstr[0], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", 
+				&eeprom_data.mac_addr[0], &eeprom_data.mac_addr[1], &eeprom_data.mac_addr[2], 
+				&eeprom_data.mac_addr[3], &eeprom_data.mac_addr[4], &eeprom_data.mac_addr[5]);
+	}
+
 	//printk("RFNM: board id %d revision %d serial %s\n", eeprom_data.board_id, eeprom_data.board_revision_id, eeprom_data.serial_number);
 
 	uint8_t *eeprom_data_ptr;
@@ -179,7 +212,9 @@ static int rfnm_bootconfig_probe(struct i2c_client *client) {
 	if(adapter->nr == 0) {
 		eeprom_data = &cfg->motherboard_eeprom;
 		if(!rfnm_load_board_info(&client->dev, eeprom_data)) {
-			printk("RFNM: Motherboard id %d revision %d serial %s\n", eeprom_data->board_id, eeprom_data->board_revision_id, eeprom_data->serial_number);
+			printk("RFNM: Motherboard id %d revision %d serial %s mac-addr %02x:%02x:%02x:%02x:%02x:%02x\n", 
+			eeprom_data->board_id, eeprom_data->board_revision_id, eeprom_data->serial_number,
+			eeprom_data->mac_addr[0], eeprom_data->mac_addr[1], eeprom_data->mac_addr[2], eeprom_data->mac_addr[3], eeprom_data->mac_addr[4], eeprom_data->mac_addr[5]);
 		}
 	} else {
 		eeprom_data = &cfg->daughterboard_eeprom[adapter->nr - 1];
