@@ -359,6 +359,9 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA)) {
 		rfnm_si5510_host_load(client, Q_Plan4_boot_bin, Q_Plan4_boot_bin_len, CMD_BUFFER_SIZE);
 		printk("RFNM: Selected plan 4 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA\n");
+	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_BREAKOUT, RFNM_DAUGHTERBOARD_BREAKOUT)) {
+		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
+		printk("RFNM: Breakout board detected: Selected plan 1 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else {
 		printk("RFNM: Couldn't find Si5510 config to work with the installed daughterboards\n");
 	}
