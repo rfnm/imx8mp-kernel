@@ -45,7 +45,7 @@
 			iqflood: iq@96400000 {
 				reg = <0 0x96400000 0 0xD000000>;
 				//compatible = "shared-dma-pool";
-				no-map;
+				//no-map;
 				//compatible = "removed-dma-pool";
 			};
 			bootconfig: bootconfig@A3400000 {
@@ -891,6 +891,8 @@
 			MX8MP_IOMUXC_SAI5_RXD2__GPIO3_IO23			0x00000106
 			MX8MP_IOMUXC_SAI5_MCLK__GPIO3_IO25			0x00000106
 
+			MX8MP_IOMUXC_SAI2_MCLK__GPIO4_IO27         0x00000106 // PPS_IN select
+			MX8MP_IOMUXC_SAI5_RXFS__GPIO3_IO19         0x00000106 // PPS_IN select
 
 		>;
 	};
