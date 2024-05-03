@@ -7,7 +7,7 @@
 #include <linux/gpio/consumer.h>
 
 
-uint32_t rfnm_wsled_chain[2][4] = {
+uint32_t chain[2][4] = {
 	// first is the arm cycle prefetch
 	// 4th is the first LED (motherboard)
 	// 3rd is the first LED on daughterboard
@@ -46,7 +46,7 @@ void rfnm_wsled_send_chain(uint8_t chain_id) {
 
 	uint32_t send[4];
 	for(z = 0; z < 4; z++) {
-		send[z] = rfnm_wsled_chain[chain_id][z];
+		send[z] = chain[chain_id][z];
 	}
 	int8_t current_bit = 0;
 	uint8_t current_led = 0;
@@ -132,8 +132,99 @@ void rfnm_wsled_send_chain(uint8_t chain_id) {
 
 EXPORT_SYMBOL(rfnm_wsled_send_chain);
 
+int rfnm_wsled_generic_parse(int chain_id, int led_id, int color_idx,  const char *buf, size_t count) {
+	
+	long long var; 
+	uint32_t c;
+
+	kstrtoll(buf, 10, &var);
+	c = 0xff & var;
+
+	// (g << 16) | (r << 8) | b
+
+	if(color_idx == 0) {
+		color_idx = 8;
+	} else if(color_idx == 1) {
+		color_idx = 16;
+	} else if(color_idx == 2) {
+		color_idx = 0;
+	}
+
+	//led_id = 3 - led_id;
+	led_id = 1 + led_id;
+
+	chain[chain_id][led_id] &= ~(0xff << color_idx);
+	chain[chain_id][led_id] |= c << color_idx;
+
+	//printk("chain %d led %d is now %x\n", chain_id, led_id, chain[chain_id][led_id]);
+
+	return count;
+}
+
+static ssize_t chain0_led0_r_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 0, 0, buf, count); }
+static ssize_t chain0_led0_g_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 0, 1, buf, count); }
+static ssize_t chain0_led0_b_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 0, 2, buf, count); }
+
+static ssize_t chain0_led1_r_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 1, 0, buf, count); }
+static ssize_t chain0_led1_g_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 1, 1, buf, count); }
+static ssize_t chain0_led1_b_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 1, 2, buf, count); }
+
+static ssize_t chain0_led2_r_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 2, 0, buf, count); }
+static ssize_t chain0_led2_g_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 2, 1, buf, count); }
+static ssize_t chain0_led2_b_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(0, 2, 2, buf, count); }
+
+static ssize_t chain1_led0_r_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 0, 0, buf, count); }
+static ssize_t chain1_led0_g_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 0, 1, buf, count); }
+static ssize_t chain1_led0_b_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 0, 2, buf, count); }
+
+static ssize_t chain1_led1_r_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 1, 0, buf, count); }
+static ssize_t chain1_led1_g_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 1, 1, buf, count); }
+static ssize_t chain1_led1_b_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 1, 2, buf, count); }
+
+static ssize_t chain1_led2_r_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 2, 0, buf, count); }
+static ssize_t chain1_led2_g_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 2, 1, buf, count); }
+static ssize_t chain1_led2_b_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { return rfnm_wsled_generic_parse(1, 2, 2, buf, count); }
+
+
+static ssize_t chain0_apply_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { rfnm_wsled_send_chain(0); return count; }
+static ssize_t chain1_apply_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) { rfnm_wsled_send_chain(1); return count; }
+
+
+static DEVICE_ATTR_WO(chain0_led0_r);
+static DEVICE_ATTR_WO(chain0_led0_g);
+static DEVICE_ATTR_WO(chain0_led0_b);
+
+static DEVICE_ATTR_WO(chain0_led1_r);
+static DEVICE_ATTR_WO(chain0_led1_g);
+static DEVICE_ATTR_WO(chain0_led1_b);
+
+static DEVICE_ATTR_WO(chain0_led2_r);
+static DEVICE_ATTR_WO(chain0_led2_g);
+static DEVICE_ATTR_WO(chain0_led2_b);
+
+static DEVICE_ATTR_WO(chain1_led0_r);
+static DEVICE_ATTR_WO(chain1_led0_g);
+static DEVICE_ATTR_WO(chain1_led0_b);
+
+static DEVICE_ATTR_WO(chain1_led1_r);
+static DEVICE_ATTR_WO(chain1_led1_g);
+static DEVICE_ATTR_WO(chain1_led1_b);
+
+static DEVICE_ATTR_WO(chain1_led2_r);
+static DEVICE_ATTR_WO(chain1_led2_g);
+static DEVICE_ATTR_WO(chain1_led2_b);
+
+static DEVICE_ATTR_WO(chain0_apply);
+static DEVICE_ATTR_WO(chain1_apply);
+
+
+
 struct gpio_desc *rfnm_wsled1_gpio;
 struct gpio_desc *rfnm_wsled2_gpio;
+
+static struct led_classdev rfnm_wsled = {
+	.name = "rfnm_wsled",
+};
 
 static int rfnm_wsled_probe(struct platform_device *pdev)
 {
@@ -160,6 +251,39 @@ static int rfnm_wsled_probe(struct platform_device *pdev)
 	rfnm_wsled_send_chain(0);
 	rfnm_wsled_send_chain(1);
 
+	led_classdev_register(&pdev->dev, &rfnm_wsled);
+
+	error = 0;
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led0_r);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led0_g);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led0_b);
+
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led1_r);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led1_g);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led1_b);
+
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led2_r);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led2_g);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_led2_b);
+
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led0_r);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led0_g);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led0_b);
+
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led1_r);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led1_g);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led1_b);
+
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led2_r);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led2_g);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_led2_b);
+
+	error |= device_create_file(&pdev->dev, &dev_attr_chain0_apply);
+	error |= device_create_file(&pdev->dev, &dev_attr_chain1_apply);
+	if(error) {
+		printk("RFNM: WSLED failed to create all dev attributes\n");
+	}
+
 	printk("RFNM: WSLED driver");
 
 	return 0;
@@ -174,7 +298,7 @@ void rfnm_wsled_set(uint8_t chain_id, uint8_t led_id, uint8_t r, uint8_t g, uint
 		printk("wrong chain_id");
 		return;
 	}
-	rfnm_wsled_chain[chain_id][1 + led_id] = b | (r << 8) | (g << 16);
+	chain[chain_id][1 + led_id] = b | (r << 8) | (g << 16);
 }
 
 EXPORT_SYMBOL(rfnm_wsled_set);
