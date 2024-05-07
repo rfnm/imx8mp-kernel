@@ -257,6 +257,11 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	struct rfnm_eeprom_data *eeprom_data;
 	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
 
+	if(device_property_read_bool(&client->dev, "rfnm,skip-5510-init-quirk")) {
+		cfg->pcie_clock_ready = 1;
+		printk("RFNM: skip-5510-init-quirk\n");
+		return 0;
+	}
 	// when rebooted without hard power reset, this memory section doesn't get inited to 0xff...
 	// move memory reset to uboot?
 
