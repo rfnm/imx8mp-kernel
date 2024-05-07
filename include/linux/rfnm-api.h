@@ -16,6 +16,12 @@ enum rfnm_bias_tee {
     RFNM_BIAS_TEE_ON
 };
 
+enum rfnm_fm_notch {
+    RFNM_FM_NOTCH_AUTO,
+	RFNM_FM_NOTCH_ON,
+	RFNM_FM_NOTCH_OFF
+};
+
 enum rfnm_rf_path {
 	RFNM_PATH_SMA_A,
 	RFNM_PATH_SMA_B,
@@ -87,6 +93,7 @@ RFNM_PACKED_STRUCT(
 		enum rfnm_ch_stream stream;
 		enum rfnm_agc_type agc;
 		enum rfnm_bias_tee bias_tee;
+		enum rfnm_fm_notch fm_notch;
 		enum rfnm_rf_path path;
 		enum rfnm_rf_path path_preferred;
 		enum rfnm_rf_path path_possible[10];
