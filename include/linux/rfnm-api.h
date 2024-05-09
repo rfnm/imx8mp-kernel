@@ -89,6 +89,9 @@ RFNM_PACKED_STRUCT(
 		int16_t samp_freq_div_n;
 		int8_t avail;
 		int8_t gain;
+		int16_t rfic_dc_off_q;
+		int16_t rfic_dc_off_i;
+		
 		enum rfnm_ch_enable enable;
 		enum rfnm_ch_stream stream;
 		enum rfnm_agc_type agc;
