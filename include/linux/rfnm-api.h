@@ -48,60 +48,65 @@ enum rfnm_ch_stream {
 	RFNM_CH_STREAM_ON
 };
 
-
-
+RFNM_PACKED_STRUCT(
+struct rfnm_range_8b {
+	int8_t min;
+	uint8_t max;
+};
+);
 
 RFNM_PACKED_STRUCT(
 	struct rfnm_api_tx_ch {
-		int8_t abs_id;
-		int8_t dgb_ch_id;
-		int8_t dgb_id;
-		int8_t dac_id;
-		int64_t freq_min;
-		int64_t freq_max;
-		int64_t freq;
-		int16_t iq_lpf_bw;
-		int16_t samp_freq_div_m;
-		int16_t samp_freq_div_n;
-		int8_t avail;
-		int8_t power;
-		enum rfnm_ch_enable enable;
-		enum rfnm_ch_stream stream;
-		enum rfnm_bias_tee bias_tee;
-		enum rfnm_rf_path path;
-		enum rfnm_rf_path path_preferred;
-		enum rfnm_rf_path path_possible[10];
-		enum rfnm_ch_data_type data_type;
-	}
+	int8_t abs_id;
+	int8_t dgb_ch_id;
+	int8_t dgb_id;
+	int8_t dac_id;
+	int64_t freq_min;
+	int64_t freq_max;
+	int64_t freq;
+	int16_t rfic_lpf_bw;
+	int16_t samp_freq_div_m;
+	int16_t samp_freq_div_n;
+	int8_t avail;
+	int8_t power;
+	struct rfnm_range_8b power_range;
+	enum rfnm_ch_enable enable;
+	enum rfnm_ch_stream stream;
+	enum rfnm_bias_tee bias_tee;
+	enum rfnm_rf_path path;
+	enum rfnm_rf_path path_preferred;
+	enum rfnm_rf_path path_possible[10];
+	enum rfnm_ch_data_type data_type;
+}
 );
 
 RFNM_PACKED_STRUCT(
 	struct rfnm_api_rx_ch {
-		int8_t abs_id;
-		int8_t dgb_ch_id;
-		int8_t dgb_id;
-		int8_t adc_id;
-		int64_t freq_min;
-		int64_t freq_max;
-		int64_t freq;
-		int16_t iq_lpf_bw;
-		int16_t samp_freq_div_m;
-		int16_t samp_freq_div_n;
-		int8_t avail;
-		int8_t gain;
-		int16_t rfic_dc_off_q;
-		int16_t rfic_dc_off_i;
-		
-		enum rfnm_ch_enable enable;
-		enum rfnm_ch_stream stream;
-		enum rfnm_agc_type agc;
-		enum rfnm_bias_tee bias_tee;
-		enum rfnm_fm_notch fm_notch;
-		enum rfnm_rf_path path;
-		enum rfnm_rf_path path_preferred;
-		enum rfnm_rf_path path_possible[10];
-		enum rfnm_ch_data_type data_type;
-	}
+	int8_t abs_id; // absolute channel id, starts at zero
+	int8_t dgb_ch_id; // channel id for this daughterboard
+	int8_t dgb_id; // daughterboard id
+	int8_t adc_id; // adc id this channel is associated with
+	int64_t freq_min;
+	int64_t freq_max;
+	int64_t freq;
+	int16_t rfic_lpf_bw; // iq low pass filter in mhz
+	int16_t samp_freq_div_m; // unused, multiplier for ddc
+	int16_t samp_freq_div_n; // either 1 or 2, divider for ddc
+	int8_t avail;
+	int8_t gain; // -100 +100 or something for now
+	struct rfnm_range_8b gain_range; // ideally the gain range described as -100 +100 before
+	int16_t rfic_dc_q; // iq rfic analog offset, internal stuff, but can be used for dc offset
+	int16_t rfic_dc_i; // iq rfic analog offset, internal stuff, but can be used for dc offset
+	enum rfnm_ch_enable enable; // probably on
+	enum rfnm_ch_stream stream; // I forgot
+	enum rfnm_agc_type agc; // not doing anything today
+	enum rfnm_bias_tee bias_tee; // also disabled today
+	enum rfnm_fm_notch fm_notch; // fm notch on/off only used on lower frequencies
+	enum rfnm_rf_path path; // set to path_preferred whenever possible
+	enum rfnm_rf_path path_preferred; // the best antenna path for this adc
+	enum rfnm_rf_path path_possible[10]; // the list of possible antenna paths for this adc
+	enum rfnm_ch_data_type data_type; // I forgot
+}
 );
 
 
