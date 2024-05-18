@@ -250,6 +250,8 @@ static void bgpio_set_set(struct gpio_chip *gc, unsigned int gpio, int val)
 
 	spin_lock_irqsave(&gc->bgpio_lock, flags);
 
+	gc->bgpio_data = gc->read_reg(gc->reg_set);
+
 	if (val)
 		gc->bgpio_data |= mask;
 	else
