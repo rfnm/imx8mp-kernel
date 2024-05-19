@@ -251,8 +251,31 @@ struct gpio_desc *la9310_bootstrap_en_gpio;
 struct gpio_desc *power_en_09_gpio;
 struct gpio_desc *la9310_power_en_gpio;
 
+uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3] = {
+	{300, 38, 38912000},{285, 40, 40960000},{256, 45, 45600000},
+	{250, 46, 46694400},{240, 48, 48640000},{228, 51, 51200000},
+	{200, 58, 58368000},{192, 60, 60800000},{190, 61, 61440000},
+	{160, 72, 72960000},{152, 76, 76800000},{150, 77, 77824000},
+	{128, 91, 91200000},{125, 93, 93388800},{120, 97, 97280000},
+	{114, 102, 102400000},{100, 116, 116736000},{96, 121, 121600000},
+	{95, 122, 122880000},{80, 145, 145920000},{76, 153, 153600000},
+	{75, 155, 155648000},{64, 182, 182400000},{60, 194, 194560000},
+	{57, 204, 204800000} };
+
+EXPORT_SYMBOL(rfnm_si5510_plan_map);
+
+void rfnm_si5510_load_from_map(struct i2c_client *client, int offset, int map, int CMD_BUFFER_SIZE) {
+	map--;
+	offset *= 4;
+	rfnm_si5510_host_load(client, rfnm_q_plan_map[offset+map], rfnm_q_plan_map_sizes[offset+map], CMD_BUFFER_SIZE);
+}
+
+
+
+
 static int rfnm_si5510_probe(struct i2c_client *client) {
 
+	int i;
 	struct rfnm_bootconfig *cfg;
 	struct rfnm_eeprom_data *eeprom_data;
 	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
@@ -352,20 +375,41 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	rfnm_si5510_boot(client);
 
+	int dcs_map_offset = -1;
+repeat_search:
+	for(i = 0; i < RFNM_NUM_DCS_FREQ; i++) {
+		if(rfnm_si5510_plan_map[i][1] == cfg->user_eeprom.dcs_clk_tmp) {
+			dcs_map_offset = i;
+			printk("RFNM: DCS clock is 11673.6 MHz / %d\n", rfnm_si5510_plan_map[i][0]);
+			break;
+		}
+	}
+
+	if(dcs_map_offset < 0) {
+		printk("RFNM: DCS clock not set in eeprom, defaulting to 122...\n");
+		cfg->user_eeprom.dcs_clk_tmp = 122;
+		goto repeat_search;
+	}
+
 	if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA)) {
-		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
+		rfnm_si5510_load_from_map(client, dcs_map_offset, 1, CMD_BUFFER_SIZE);
+		//rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
 		printk("RFNM: Selected plan 1 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_LIME)) {
-		rfnm_si5510_host_load(client, Q_Plan2_boot_bin, Q_Plan2_boot_bin_len, CMD_BUFFER_SIZE);
+		rfnm_si5510_load_from_map(client, dcs_map_offset, 2, CMD_BUFFER_SIZE);
+		//rfnm_si5510_host_load(client, Q_Plan2_boot_bin, Q_Plan2_boot_bin_len, CMD_BUFFER_SIZE);
 		printk("RFNM: Selected plan 2 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_LIME\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_LIME)) {
-		rfnm_si5510_host_load(client, Q_Plan3_boot_bin, Q_Plan3_boot_bin_len, CMD_BUFFER_SIZE);
+		rfnm_si5510_load_from_map(client, dcs_map_offset, 3, CMD_BUFFER_SIZE);
+		//rfnm_si5510_host_load(client, Q_Plan3_boot_bin, Q_Plan3_boot_bin_len, CMD_BUFFER_SIZE);
 		printk("RFNM: Selected plan 3 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_LIME\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA)) {
-		rfnm_si5510_host_load(client, Q_Plan4_boot_bin, Q_Plan4_boot_bin_len, CMD_BUFFER_SIZE);
+		rfnm_si5510_load_from_map(client, dcs_map_offset, 4, CMD_BUFFER_SIZE);
+		//rfnm_si5510_host_load(client, Q_Plan4_boot_bin, Q_Plan4_boot_bin_len, CMD_BUFFER_SIZE);
 		printk("RFNM: Selected plan 4 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_BREAKOUT, RFNM_DAUGHTERBOARD_BREAKOUT)) {
-		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
+		rfnm_si5510_load_from_map(client, dcs_map_offset, 1, CMD_BUFFER_SIZE);
+		//rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
 		printk("RFNM: Breakout board detected: Selected plan 1 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else {
 		printk("RFNM: Couldn't find Si5510 config to work with the installed daughterboards\n");
