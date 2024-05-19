@@ -26,6 +26,8 @@ typedef   signed char        int8_t;
 */
 
 
+// 256 bytes divided into 32 pages, factory config starts at 0, user config starts at 128
+
 
 void rfnm_bootconfig_read_eeprom(struct i2c_client *client, uint8_t addr, uint8_t * buf) {
 
@@ -79,6 +81,53 @@ int rfnm_load_board_info(struct device *dev, struct rfnm_eeprom_data *eeprom_dat
 
 	return 0;
 }
+
+
+int rfnm_load_user_config(struct device *dev, struct rfnm_eeprom_user_config *eeprom_data) {
+	
+	int i, ret;
+	uint8_t i2cbuf;
+	uint8_t *eeprom_data_ptr;
+	eeprom_data_ptr = (uint8_t*) eeprom_data;
+	struct i2c_client *client = to_i2c_client(dev);
+
+	memset(eeprom_data, 0, sizeof(*eeprom_data));
+	
+	for(i = 0; i < sizeof(*eeprom_data); i++) {
+		rfnm_bootconfig_read_eeprom(client, 128+i, &i2cbuf);
+		//printk("RFNM: %02x\n", i2cbuf);
+		*(eeprom_data_ptr + i) = i2cbuf;
+	}
+
+	if(eeprom_data->crc != crc32(0x80000000, eeprom_data_ptr, sizeof(*eeprom_data) - 4)) {
+		//printk("RFNM: crc mismatch, eeprom read failed %x %x\n", eeprom_data->crc, crc32(0x80000000, eeprom_data_ptr, sizeof(*eeprom_data) - 4));
+		return -1;
+	}
+
+	return 0;
+}
+
+static ssize_t rfnm_display_user_config_show(struct device *dev, struct device_attribute *attr, char *buf) {
+
+	struct i2c_client *client = to_i2c_client(dev);
+	struct i2c_adapter *adapter = client->adapter;
+	int adapter_nr = i2c_adapter_id(adapter);
+	uint8_t i2cbuf;
+	int z;
+	struct rfnm_eeprom_user_config eeprom_user;
+
+	if(adapter_nr) {
+		return snprintf(buf, PAGE_SIZE, "Not supported for those\n");
+	} 
+
+	if(rfnm_load_user_config(dev, &eeprom_user)) {
+		return snprintf(buf, PAGE_SIZE, "Failed to read eeprom\n");
+	} else {
+		return snprintf(buf, PAGE_SIZE, "DCS clock is %d\n", eeprom_user.dcs_clk_tmp );
+	}
+}
+
+static DEVICE_ATTR_RO(rfnm_display_user_config);
 
 
 static ssize_t rfnm_show_board_info_show(struct device *dev, struct device_attribute *attr, char *buf) {
@@ -201,12 +250,67 @@ static ssize_t rfnm_factory_use_only_store(struct device *dev, struct device_att
 static DEVICE_ATTR_WO(rfnm_factory_use_only);
 
 
+
+static ssize_t rfnm_set_dcs_freq_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
+
+	struct i2c_client *client = to_i2c_client(dev);
+	struct i2c_adapter *adapter = client->adapter;
+	int adapter_nr = i2c_adapter_id(adapter);
+
+	//01-02-abcdefgh
+	//01-02-abcdefgh-00:00:00:00:00:00
+
+	if(adapter_nr) {
+		return -EINVAL;
+	}
+	uint32_t tmpval;
+	struct rfnm_eeprom_user_config eeprom_data;
+	int i, ret;
+
+	memset((uint8_t*) &eeprom_data, 0, sizeof(eeprom_data));
+
+	eeprom_data.magic_header[0] = 0xA1;
+	eeprom_data.magic_header[1] = 0x45;
+	eeprom_data.magic_header[2] = 0x8E;
+	eeprom_data.magic_header[3] = 0xF8;
+
+
+    if (kstrtou32(&buf[0], 10, &tmpval) != 0) {
+		//printk("RFNM: invalid digit at pos 1");
+		return -EINVAL;
+	}
+
+	eeprom_data.dcs_clk_tmp = tmpval;
+
+	uint8_t *eeprom_data_ptr;
+	eeprom_data_ptr = (uint8_t*) &eeprom_data;
+
+	eeprom_data.crc = crc32(0x80000000, eeprom_data_ptr, sizeof(eeprom_data) - 4);
+	
+	for(i = 0; i < sizeof(eeprom_data); i++) {
+		//printk("RFNM: %d %02x\n", i, eeprom_data_ptr[i]);
+		ret = rfnm_bootconfig_write_eeprom(client, 128+i, *(eeprom_data_ptr + i));
+		if(ret < 0) {
+			printk("RFNM: Write to daughterboard failed");
+			return -ENODEV;
+		}
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(rfnm_set_dcs_freq);
+
+
+
+
 static int rfnm_bootconfig_probe(struct i2c_client *client) {
 
 	struct i2c_adapter *adapter = client->adapter;
 	
 	struct rfnm_bootconfig *cfg;
 	struct rfnm_eeprom_data *eeprom_data;
+	struct rfnm_eeprom_user_config *eeprom_user;
 	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB); 
 
 	if(adapter->nr == 0) {
@@ -215,6 +319,11 @@ static int rfnm_bootconfig_probe(struct i2c_client *client) {
 			printk("RFNM: Motherboard id %d revision %d serial %s mac-addr %02x:%02x:%02x:%02x:%02x:%02x\n", 
 			eeprom_data->board_id, eeprom_data->board_revision_id, eeprom_data->serial_number,
 			eeprom_data->mac_addr[0], eeprom_data->mac_addr[1], eeprom_data->mac_addr[2], eeprom_data->mac_addr[3], eeprom_data->mac_addr[4], eeprom_data->mac_addr[5]);
+		}
+
+		eeprom_user = &cfg->user_eeprom;		
+		if(!rfnm_load_user_config(&client->dev, eeprom_user)) {
+			printk("RFNM: DCS clock is %d\n", eeprom_user->dcs_clk_tmp);
 		}
 	} else {
 		eeprom_data = &cfg->daughterboard_eeprom[adapter->nr - 1];
@@ -240,12 +349,33 @@ static int rfnm_bootconfig_probe(struct i2c_client *client) {
 		printk("RFNM: failed to create device file for rfnm_factory_use_only");
 	}
 
+	if(adapter->nr == 0) {
+		err = device_create_file(&client->dev, &dev_attr_rfnm_display_user_config);
+		if (err < 0) {
+			printk("RFNM: failed to create device file for rfnm_display_user_config");
+		}
+
+		err = device_create_file(&client->dev, &dev_attr_rfnm_set_dcs_freq);
+		if (err < 0) {
+			printk("RFNM: failed to create device file for rfnm_set_dcs_freq");
+		}
+	}
+
+	
+
 	return 0;
 }
 
 static int rfnm_bootconfig_remove(struct i2c_client *client) {
+	struct i2c_adapter *adapter = client->adapter;
+
 	device_remove_file(&client->dev, &(dev_attr_rfnm_show_board_info));
 	device_remove_file(&client->dev, &(dev_attr_rfnm_factory_use_only));
+
+	if(adapter->nr == 0) {
+		device_remove_file(&client->dev, &(dev_attr_rfnm_display_user_config));
+		device_remove_file(&client->dev, &(dev_attr_rfnm_set_dcs_freq));
+	}
 	return 0;
 }
 

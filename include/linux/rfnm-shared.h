@@ -46,42 +46,9 @@
 #define HZ_TO_MHZ(Hz) (Hz / (1000ul * 1000ul))
 #define HZ_TO_KHZ(Hz) (Hz / 1000ul)
 
-/*
-struct rfnm_dgb_tx_ch {
-	int freq;
-	int freq_max;
-	int freq_min;
-	int power;
-	int dac_id;
-	int ch_id;
-	
-	void * ch_get;
-	void * ch_set;
-};
 
-struct rfnm_dgb_rx_ch {
-	int freq;
-	int freq_max;
-	int freq_min;
-	int gain;
-	int adc_id;
-	int ch_id;
-	
-	void * ch_get;
-	void * ch_set;
-};
-
-struct rfnm_dgb {
-	struct rfnm_dgb_rx_ch rx_ch[4];
-	struct rfnm_dgb_tx_ch tx_ch[4];
-	int rx_ch_cnt;
-	int tx_ch_cnt;
-	uint8_t board_id;
-	uint8_t board_revision_id;
-	uint8_t serial_number[9];
-	struct rfnm_dgb_dt *rfnm_dgb_dt;
-};
-*/
+#define RFNM_NUM_DCS_FREQ 25
+extern uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3];
 
 
 
@@ -97,6 +64,13 @@ struct __attribute__((__packed__)) rfnm_eeprom_data {
 	uint32_t crc;
 };
 
+
+struct __attribute__((__packed__)) rfnm_eeprom_user_config {
+	uint8_t magic_header[4];
+	uint32_t dcs_clk_tmp;
+	uint32_t crc;
+};
+
 // 0xff initial status is only guaranteed by uboot mod in the first 4kB
 struct __attribute__((__packed__)) rfnm_bootconfig {
 	uint8_t daughterboard_present[2];
@@ -104,6 +78,7 @@ struct __attribute__((__packed__)) rfnm_bootconfig {
 	uint8_t usb_pd_negotiation_in_progress;
 	struct rfnm_eeprom_data motherboard_eeprom;
 	struct rfnm_eeprom_data daughterboard_eeprom[2];
+	struct rfnm_eeprom_user_config user_eeprom;
 };
 
 
