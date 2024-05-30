@@ -213,9 +213,10 @@ void rfnm_si5510_set_output_status(struct i2c_client *client, int output_id, int
 		msleep(10);
 		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
 	} while(i2c_read_buf[0] != 0x80);
-
-
 }
+
+EXPORT_SYMBOL(rfnm_si5510_set_output_status);
+
 
 
 static ssize_t rfnm_ext_ref_out_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
@@ -425,7 +426,7 @@ repeat_search:
 
 	if(cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_PRESENT && cfg->daughterboard_eeprom[1].board_id != RFNM_DAUGHTERBOARD_BREAKOUT) {
 		rfnm_si5510_set_output_status(client, 2, 1);
-		if(cfg->daughterboard_eeprom[0].board_id != RFNM_DAUGHTERBOARD_LIME) {
+		if(cfg->daughterboard_eeprom[1].board_id != RFNM_DAUGHTERBOARD_LIME) {
 			rfnm_si5510_set_output_status(client, 0, 1);
 		}
 		printk("RFNM: Enabling clocks for RBB\n");
