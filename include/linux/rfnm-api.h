@@ -52,7 +52,7 @@ RFNM_PACKED_STRUCT(
 struct rfnm_range_8b {
 	int8_t min;
 	uint8_t max;
-};
+}
 );
 
 RFNM_PACKED_STRUCT(

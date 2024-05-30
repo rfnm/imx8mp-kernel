@@ -28,6 +28,9 @@
 #define RFNM_DGB_GPIO4_23 ((4 << R_DBG_S_PRI_BANK) | (23 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (23 << R_DBG_S_SEC_NUM))
 #define RFNM_DGB_GPIO4_31 ((4 << R_DBG_S_PRI_BANK) | (31 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_SEC_BANK) | (31 << R_DBG_S_SEC_NUM))
 
+#define RFNM_GPIO4_26 ((4 << R_DBG_S_PRI_BANK) | (26 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_PRI_BANK) | (26 << R_DBG_S_PRI_NUM))
+#define RFNM_GPIO4_30 ((4 << R_DBG_S_PRI_BANK) | (30 << R_DBG_S_PRI_NUM) | (4 << R_DBG_S_PRI_BANK) | (30 << R_DBG_S_PRI_NUM))
+
 // bit order is inverted in LA?
 #define RFNM_DGB_LA_FE_CLK ((6 << R_DBG_S_PRI_BANK) | (24 << R_DBG_S_PRI_NUM) | (6 << R_DBG_S_SEC_BANK) | (23 << R_DBG_S_SEC_NUM))
 
