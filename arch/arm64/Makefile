@@ -38,13 +38,13 @@ endif
 
 
 
-ifeq ($(CONFIG_ENABLE_FLOAT_BYPASS),y)
-$(warning COMPILING WITH FLOAT SUPPORT)
-#KBUILD_CFLAGS  += -msoft-float
-else
-$(warning CONFIG_ENABLE_FLOAT_BYPASS is NOT enabled)
+#ifeq ($(CONFIG_ENABLE_FLOAT_BYPASS),y)
+#$(warning COMPILING WITH FLOAT SUPPORT)
+##KBUILD_CFLAGS  += -msoft-float
+#else
+#$(warning CONFIG_ENABLE_FLOAT_BYPASS is NOT enabled)
 KBUILD_CFLAGS  += -mgeneral-regs-only
-endif
+#endif
 
 KBUILD_CFLAGS  += $(compat_vdso) $(cc_has_k_constraint)
 
