@@ -299,6 +299,11 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 		return -EPROBE_DEFER;
 	}
 
+	// hack 
+	if(cfg->daughterboard_eeprom[0].board_id == RFNM_DAUGHTERBOARD_YUCCA) {
+		cfg->daughterboard_eeprom[0].board_id = RFNM_DAUGHTERBOARD_GRANITA;
+	}
+
 	s64  uptime_ms;
     uptime_ms = ktime_to_ms(ktime_get_boottime());
 
