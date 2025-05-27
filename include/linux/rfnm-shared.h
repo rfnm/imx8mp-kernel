@@ -54,8 +54,9 @@
 
 
 #define RFNM_NUM_DCS_FREQ 25
-extern uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3];
-
+//extern uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3];
+extern uint32_t rfnm_si5510_get_dcs_freq(struct i2c_client *client);
+extern void rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq);
 
 
 
@@ -175,11 +176,11 @@ void rfnm_populate_dev_rx_chlist(struct rfnm_dev_rx_ch_list * r_chlist);
 void rfnm_apply_dev_tx_chlist(struct rfnm_dev_tx_ch_list * r_chlist);
 void rfnm_apply_dev_rx_chlist(struct rfnm_dev_rx_ch_list * r_chlist);
 void rfnm_populate_dev_set_res(struct rfnm_dev_get_set_result * r_res);
-int rfnm_la9310_stream(uint8_t tx, uint8_t *rx);
-int rfnm_la9310_stream(uint8_t tx, uint8_t *rx);
+void rfnm_set_dcs_freq_user(uint64_t freq);
+int rfnm_la9310_stream(uint64_t user_dcs_hz, uint8_t tx, uint8_t *rx);
 void rfnm_populate_dev_status(struct rfnm_dev_status * r_stat);
 void rfnm_restart_sm(int hard);
-
+int rfnm_dev_process_udp_ctrl(uint32_t cmd, uint32_t *size, uint8_t *buf);
 
 
 #endif
