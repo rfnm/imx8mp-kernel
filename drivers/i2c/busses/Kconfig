@@ -1493,4 +1493,15 @@ config I2C_VIRTIO
           This driver can also be built as a module. If so, the module
           will be called i2c-virtio.
 
+config RFNM_SI5510
+	tristate "Enable RFNM's Si5510 boot init"
+	help
+	  Fast init to get pcie running at boot
+
+config RFNM_BOOTCONFIG
+	tristate "Enable RFNM's EEPROM bootconfig driver"
+	help
+	  Read EEPROM from mother/daughterboards at boot and populate board configs
+	  
 endmenu
+

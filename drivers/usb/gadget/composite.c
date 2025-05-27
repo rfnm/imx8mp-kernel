@@ -2700,6 +2700,7 @@ int usb_composite_probe(struct usb_composite_driver *driver)
 	gadget_driver->function =  (char *) driver->name;
 	gadget_driver->driver.name = driver->name;
 	gadget_driver->max_speed = driver->max_speed;
+	gadget_driver->udc_name = driver->udc_name;
 
 	return usb_gadget_register_driver(gadget_driver);
 }

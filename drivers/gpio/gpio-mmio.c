@@ -252,6 +252,9 @@ static void bgpio_set_set(struct gpio_chip *gc, unsigned int gpio, int val)
 
 	raw_spin_lock_irqsave(&gc->bgpio_lock, flags);
 
+	// as we are modifying gpios in our rfnm-gpio driver, read it back before changing it 
+	gc->bgpio_data = gc->read_reg(gc->reg_set);
+
 	if (val)
 		gc->bgpio_data |= mask;
 	else

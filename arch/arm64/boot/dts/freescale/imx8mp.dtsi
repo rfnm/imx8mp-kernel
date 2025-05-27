@@ -818,6 +818,10 @@
 						power-domains = <&pgc_gpumix>;
 					};
 
+					/*pgc_dump: power-domain@8 {
+						
+					};*/
+
 					pgc_gpu3d: power-domain@9 {
 						#power-domain-cells = <0>;
 						reg = <IMX8MP_POWER_DOMAIN_GPU3D>;
@@ -879,21 +883,21 @@
 
 					pgc_vpu_g1: power-domain@20 {
 						#power-domain-cells = <0>;
-						power-domains = <&pgc_vpumix>;
+						#power-domains = <&pgc_vpumix>;
 						reg = <IMX8MP_POWER_DOMAIN_VPU_G1>;
 						clocks = <&clk IMX8MP_CLK_VPU_G1_ROOT>;
 					};
 
 					pgc_vpu_g2: power-domain@21 {
 						#power-domain-cells = <0>;
-						power-domains = <&pgc_vpumix>;
+						#power-domains = <&pgc_vpumix>;
 						reg = <IMX8MP_POWER_DOMAIN_VPU_G2>;
 						clocks = <&clk IMX8MP_CLK_VPU_G2_ROOT>;
 					};
 
 					pgc_vpu_vc8000e: power-domain@22 {
 						#power-domain-cells = <0>;
-						power-domains = <&pgc_vpumix>;
+						#power-domains = <&pgc_vpumix>;
 						reg = <IMX8MP_POWER_DOMAIN_VPU_VC8000E>;
 						clocks = <&clk IMX8MP_CLK_VPU_VC8KE_ROOT>;
 					};
@@ -2483,8 +2487,8 @@
 		mboxes = <&mu2 0 0>,
 			 <&mu2 1 0>,
 			 <&mu2 3 0>;
-		memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
-				<&dsp_vdev0vring1>, <&dsp_reserved>;
+		//memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
+		//		<&dsp_vdev0vring1>, <&dsp_reserved>;
 		fsl,dsp-ctrl = <&audio_blk_ctrl>;
 		status = "disabled";
 	};

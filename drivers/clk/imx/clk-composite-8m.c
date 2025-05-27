@@ -290,14 +290,22 @@ struct clk_hw *__imx8m_clk_hw_composite(const char *name,
 	if (!gate)
 		goto fail;
 
-	gate_hw = &gate->hw;
-	gate->reg = reg;
-	gate->bit_idx = PCG_CGC_SHIFT;
-	gate->lock = &imx_ccm_lock;
-	if (!mcore_booted)
-		gate_ops = &clk_gate_ops;
-	else
-		gate_ops = &imx8m_clk_composite_gate_ops;
+	// need to force skip gate registration to boot m7 from remoteproc without uboot help... 
+	// (there goes two hours) 
+	if(1) {
+        gate_hw  = NULL;
+        gate_ops = NULL;
+	} else {
+
+		gate_hw = &gate->hw;
+		gate->reg = reg;
+		gate->bit_idx = PCG_CGC_SHIFT;
+		gate->lock = &imx_ccm_lock;
+		if (!mcore_booted)
+			gate_ops = &clk_gate_ops;
+		else
+			gate_ops = &imx8m_clk_composite_gate_ops;
+	}
 
 	hw = clk_hw_register_composite(NULL, name, parent_names, num_parents,
 			mux_hw, mux_ops, div_hw,
