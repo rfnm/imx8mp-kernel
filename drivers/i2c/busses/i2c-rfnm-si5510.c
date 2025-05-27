@@ -14,6 +14,10 @@
 typedef unsigned char       uint8_t;
 typedef   signed char        int8_t;
 
+uint32_t RFNM_SI5510_CMD_BUFFER_SIZE;
+
+uint32_t rfnm_dcs_freq_hz;
+
 void rfnm_si5510_i2c_read(struct i2c_client *client, uint8_t * buf, int cnt) {
 
 	uint8_t CTS[6] = {0xf0, 0x0f};
@@ -54,7 +58,7 @@ void rfnm_si5510_cts(struct i2c_client *client) {
 	} while (i2c_read_buf[0] != 0x80);
 }
 
-int rfnm_si5510_buffsize(struct i2c_client *client) {
+void rfnm_si5510_buffsize(struct i2c_client *client) {
 
 	uint8_t i2c_read_buf[100];
 	uint8_t sio_info_request[3] = { 0xF0, 0x0F, 0x02 };
@@ -64,10 +68,11 @@ int rfnm_si5510_buffsize(struct i2c_client *client) {
 		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
 	} while(i2c_read_buf[0] != 0x80);
 
-	int CMD_BUFFER_SIZE = (i2c_read_buf[2] << 8) + i2c_read_buf[1];
+	RFNM_SI5510_CMD_BUFFER_SIZE = (i2c_read_buf[2] << 8) + i2c_read_buf[1];
+	RFNM_SI5510_CMD_BUFFER_SIZE -= 10; // margin for command packets
 
-	//printk("RFNM: Command buffer size from SIO_INFO: %d\n", CMD_BUFFER_SIZE);
-	return CMD_BUFFER_SIZE;
+	//printk("RFNM: Command buffer size from SIO_INFO: %d\n", RFNM_SI5510_CMD_BUFFER_SIZE);
+	//return RFNM_SI5510_CMD_BUFFER_SIZE;
 }
 
 
@@ -89,27 +94,27 @@ void rfnm_si5510_restart(struct i2c_client *client) {
 	//printk("RFNM: RESTART Sent.\n");
 }
 
-void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen, int CMD_BUFFER_SIZE) {
+void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen) {
 
-	CMD_BUFFER_SIZE -= 10; // margin for command packets
+	//RFNM_SI5510_CMD_BUFFER_SIZE -= 10; // margin for command packets
 	uint8_t i2c_read_buf[100];
-	int numberOfChunks = (datalen / CMD_BUFFER_SIZE) + 1;
+	int numberOfChunks = (datalen / RFNM_SI5510_CMD_BUFFER_SIZE) + 1;
 
 	int chunkNum;
 
 	uint8_t host_load_command_init[3] = { 0xF0, 0x0F, 0x05 };
 	uint8_t * host_load_command;
 
-	host_load_command = kmalloc(CMD_BUFFER_SIZE + 10, GFP_KERNEL);
+	host_load_command = kmalloc(RFNM_SI5510_CMD_BUFFER_SIZE + 10, GFP_KERNEL);
 	memcpy(host_load_command, &host_load_command_init[0], 3);
 
 	for (chunkNum = 0; chunkNum < numberOfChunks; ++chunkNum) {
-		int chunkSize = CMD_BUFFER_SIZE;
+		int chunkSize = RFNM_SI5510_CMD_BUFFER_SIZE;
 		if (chunkNum == numberOfChunks - 1) {
-			chunkSize = datalen % CMD_BUFFER_SIZE;
+			chunkSize = datalen % RFNM_SI5510_CMD_BUFFER_SIZE;
 		}
 
-		memcpy(&host_load_command[3], &data[chunkNum * CMD_BUFFER_SIZE], chunkSize);
+		memcpy(&host_load_command[3], &data[chunkNum * RFNM_SI5510_CMD_BUFFER_SIZE], chunkSize);
 		rfnm_si5510_i2c_write(client, &host_load_command[0], chunkSize + 3);
 
 		do {
@@ -242,6 +247,115 @@ static ssize_t rfnm_ext_ref_out_store(struct device *dev, struct device_attribut
 static DEVICE_ATTR_WO(rfnm_ext_ref_out);
 
 
+void rfnm_si5510_set_dcs_freq_work(struct i2c_client *client, uint64_t freq) {
+
+	uint8_t *fotf_nb = (uint8_t *) kzalloc(0xff, GFP_KERNEL);
+	uint8_t fotf_nb_size = 0;
+
+	uint32_t idx = 0;
+	uint32_t idx_replay_to = 0;
+	uint32_t b;
+
+	while (idx < RFNM_SI5510_NUM_INDEX_ELEMS) {
+		if (rfnm_si5510_compression_index[idx].freq == (freq / 1000)) {
+			idx_replay_to = idx;
+			while (idx >= 0) {
+				if (rfnm_si5510_compression_index[idx].type == 0) {
+					fotf_nb_size = rfnm_si5510_compression_index[idx].size;
+					memcpy(fotf_nb, &rfnm_si5510_compressed_bin[rfnm_si5510_compression_index[idx].start], fotf_nb_size);
+					break;
+				}
+				idx--;
+			}
+			while (idx <= idx_replay_to) {
+				if (rfnm_si5510_compression_index[idx].type == 1) {
+					for (b = 0; b < rfnm_si5510_compression_index[idx].size; b+=2) {
+						//uint8_t fotf_nb_size2 = rfnm_si5510_compression_index[idx].size;
+						//uint8_t fotf_nb_start = rfnm_si5510_compression_index[idx].start;
+						uint8_t* br = (uint8_t*)&rfnm_si5510_compressed_bin[rfnm_si5510_compression_index[idx].start];
+
+						fotf_nb[br[b]] = br[b + 1];
+					}
+				}
+				idx++;
+			}
+			break;
+		}
+		idx++;
+	}
+
+	printk("RFNM: Si5510: setting LA9310 to %d kHz, idx %d size %d\n", freq / 1000, idx, fotf_nb_size);
+	/*for(b = 0; b < fotf_nb_size; b++) {
+		printk("%02x ", fotf_nb[b]);
+	}*/
+
+	rfnm_si5510_host_load(client, fotf_nb, fotf_nb_size);
+	
+	rfnm_dcs_freq_hz = freq;
+	kfree(fotf_nb);
+}
+
+// as it turns out, chilling smaller steps is counter productive, as the switching is not glitchless. rip. 
+void rfnm_si5510_set_dcs_freq_chill(struct i2c_client *client, uint64_t target_freq) {
+
+	uint64_t MAX_FREQ_CHANGE = 1e6; // keep it bigger than min_freq
+	uint64_t freq;
+	if((rfnm_dcs_freq_hz < target_freq) && (rfnm_dcs_freq_hz + MAX_FREQ_CHANGE < target_freq)) {
+		freq = rfnm_dcs_freq_hz + MAX_FREQ_CHANGE;
+	}
+	else if((rfnm_dcs_freq_hz > target_freq) && (rfnm_dcs_freq_hz - MAX_FREQ_CHANGE > target_freq)) {
+		freq = rfnm_dcs_freq_hz - MAX_FREQ_CHANGE;
+	} else {
+		freq = target_freq;
+	}
+	rfnm_si5510_set_dcs_freq_work(client, freq);
+	if(target_freq != freq) {
+		//printk("RFNM: easing freq change %ld\n", target_freq);
+		msleep(10);
+		rfnm_si5510_set_dcs_freq_chill(client, target_freq);
+	}
+}
+
+void rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq) {
+
+	rfnm_si5510_set_dcs_freq_work(client, freq);
+	//rfnm_si5510_set_dcs_freq_chill(client, freq);
+}
+
+EXPORT_SYMBOL(rfnm_si5510_set_dcs_freq);
+
+uint32_t rfnm_si5510_get_dcs_freq(struct i2c_client *client) {
+	return rfnm_dcs_freq_hz;
+}
+
+EXPORT_SYMBOL(rfnm_si5510_get_dcs_freq);
+
+
+
+
+static ssize_t rfnm_set_dcs_freq_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
+
+	struct i2c_client *client = to_i2c_client(dev);
+	
+	uint32_t reqfreq;
+
+    if (kstrtou32(&buf[0], 10, &reqfreq) != 0) {
+		return -EINVAL;
+	}
+
+	if(reqfreq < 1000 || reqfreq > 2000000) {
+		printk("RFNM: Invalid DCS frequency requested, valid range is [1 - 200] MHz, expressed in KHz. Eg, 122880 for 122.88 MHz\n");
+		return -EINVAL;
+	}
+
+	rfnm_si5510_set_dcs_freq(client, reqfreq * 1000);
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(rfnm_set_dcs_freq);
+
+
 
 
 struct gpio_desc *si5510_rst_gpio;
@@ -251,7 +365,7 @@ struct gpio_desc *la9310_bootstrap_en_gpio;
 
 struct gpio_desc *power_en_09_gpio;
 struct gpio_desc *la9310_power_en_gpio;
-
+/*
 uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3] = {
 	{300, 38, 38912000},{285, 40, 40960000},{256, 45, 45600000},
 	{250, 46, 46694400},{240, 48, 48640000},{228, 51, 51200000},
@@ -265,12 +379,12 @@ uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3] = {
 
 EXPORT_SYMBOL(rfnm_si5510_plan_map);
 
-void rfnm_si5510_load_from_map(struct i2c_client *client, int offset, int map, int CMD_BUFFER_SIZE) {
+void rfnm_si5510_load_from_map(struct i2c_client *client, int offset, int map, int RFNM_SI5510_CMD_BUFFER_SIZE) {
 	map--;
 	offset *= 4;
-	rfnm_si5510_host_load(client, rfnm_q_plan_map[offset+map], rfnm_q_plan_map_sizes[offset+map], CMD_BUFFER_SIZE);
+	rfnm_si5510_host_load(client, rfnm_q_plan_map[offset+map], rfnm_q_plan_map_sizes[offset+map], RFNM_SI5510_CMD_BUFFER_SIZE);
 }
-
+*/
 
 
 
@@ -280,6 +394,8 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	struct rfnm_bootconfig *cfg;
 	struct rfnm_eeprom_data *eeprom_data;
 	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
+
+	rfnm_dcs_freq_hz = 122880000;
 
 	if(device_property_read_bool(&client->dev, "rfnm,skip-5510-init-quirk")) {
 		cfg->pcie_clock_ready = 1;
@@ -303,7 +419,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	if(cfg->daughterboard_eeprom[0].board_id == RFNM_DAUGHTERBOARD_YUCCA) {
 		cfg->daughterboard_eeprom[0].board_id = RFNM_DAUGHTERBOARD_GRANITA;
 	}
-
+#if 0
 	s64  uptime_ms;
     uptime_ms = ktime_to_ms(ktime_get_boottime());
 
@@ -312,7 +428,7 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 		printk("RFNM: Deferring Si5510 probe...\n");
 		return -EPROBE_DEFER;
 	}
-
+#endif
 	printk("RFNM: Starting up Si5510...\n");
 
 	si5510_rst_gpio = devm_gpiod_get(&client->dev, "si5510-rst", GPIOD_OUT_LOW);
@@ -372,16 +488,16 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	rfnm_si5510_sio_test(client);
 
-	int CMD_BUFFER_SIZE = rfnm_si5510_buffsize(client);
+	/*int RFNM_SI5510_CMD_BUFFER_SIZE = */ rfnm_si5510_buffsize(client);
 
 	rfnm_si5510_restart(client);
 
-	rfnm_si5510_host_load(client, prod_fw_boot_bin, prod_fw_boot_bin_len, CMD_BUFFER_SIZE);
-	rfnm_si5510_host_load(client, Base_Plan_boot_bin, Base_Plan_boot_bin_len, CMD_BUFFER_SIZE);
+	rfnm_si5510_host_load(client, prod_fw_boot_bin, prod_fw_boot_bin_len);
+	rfnm_si5510_host_load(client, Base_Plan_boot_bin, Base_Plan_boot_bin_len);
 
 	rfnm_si5510_boot(client);
 
-	int dcs_map_offset = -1;
+	/*int dcs_map_offset = -1;
 repeat_search:
 	for(i = 0; i < RFNM_NUM_DCS_FREQ; i++) {
 		if(rfnm_si5510_plan_map[i][1] == cfg->user_eeprom.dcs_clk_tmp) {
@@ -395,27 +511,27 @@ repeat_search:
 		printk("RFNM: DCS clock not set in eeprom, defaulting to 122...\n");
 		cfg->user_eeprom.dcs_clk_tmp = 122;
 		goto repeat_search;
-	}
+	}*/
 
 	if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA)) {
-		rfnm_si5510_load_from_map(client, dcs_map_offset, 1, CMD_BUFFER_SIZE);
-		//rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
+		//rfnm_si5510_load_from_map(client, dcs_map_offset, 1);
+		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len);
 		printk("RFNM: Selected plan 1 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_LIME)) {
-		rfnm_si5510_load_from_map(client, dcs_map_offset, 2, CMD_BUFFER_SIZE);
-		//rfnm_si5510_host_load(client, Q_Plan2_boot_bin, Q_Plan2_boot_bin_len, CMD_BUFFER_SIZE);
+		//rfnm_si5510_load_from_map(client, dcs_map_offset, 2);
+		rfnm_si5510_host_load(client, Q_Plan2_boot_bin, Q_Plan2_boot_bin_len);
 		printk("RFNM: Selected plan 2 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_LIME\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_LIME)) {
-		rfnm_si5510_load_from_map(client, dcs_map_offset, 3, CMD_BUFFER_SIZE);
-		//rfnm_si5510_host_load(client, Q_Plan3_boot_bin, Q_Plan3_boot_bin_len, CMD_BUFFER_SIZE);
+		//rfnm_si5510_load_from_map(client, dcs_map_offset, 3);
+		rfnm_si5510_host_load(client, Q_Plan3_boot_bin, Q_Plan3_boot_bin_len);
 		printk("RFNM: Selected plan 3 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_LIME\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA)) {
-		rfnm_si5510_load_from_map(client, dcs_map_offset, 4, CMD_BUFFER_SIZE);
-		//rfnm_si5510_host_load(client, Q_Plan4_boot_bin, Q_Plan4_boot_bin_len, CMD_BUFFER_SIZE);
+		//rfnm_si5510_load_from_map(client, dcs_map_offset, 4);
+		rfnm_si5510_host_load(client, Q_Plan4_boot_bin, Q_Plan4_boot_bin_len);
 		printk("RFNM: Selected plan 4 RFNM_DAUGHTERBOARD_LIME, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_BREAKOUT, RFNM_DAUGHTERBOARD_BREAKOUT)) {
-		rfnm_si5510_load_from_map(client, dcs_map_offset, 1, CMD_BUFFER_SIZE);
-		//rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len, CMD_BUFFER_SIZE);
+		//rfnm_si5510_load_from_map(client, dcs_map_offset, 1);
+		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len);
 		printk("RFNM: Breakout board detected: Selected plan 1 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA\n");
 	} else {
 		printk("RFNM: Couldn't find Si5510 config to work with the installed daughterboards\n");
@@ -492,6 +608,11 @@ repeat_search:
 	if (err < 0) {
 		printk("RFNM: failed to create device file for rfnm_ext_ref_out");
 	}
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_set_dcs_freq);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_set_dcs_freq");
+	}
 	//device_remove_file(&client->dev, &(dev_attr_rfnm_show_board_info));
 
 	return 0;
@@ -520,5 +641,13 @@ static struct i2c_driver rfnm_si5510_driver = {
 	.probe_new	= rfnm_si5510_probe,
 	.id_table	= rfnm_si5510_id_table,
 };
-module_i2c_driver(rfnm_si5510_driver);
+//module_i2c_driver(rfnm_si5510_driver);
+
+
+static int __init rfnm_si5510_init(void)
+{
+    return i2c_add_driver(&rfnm_si5510_driver);
+}
+late_initcall(rfnm_si5510_init);
+
 MODULE_LICENSE("GPL");
