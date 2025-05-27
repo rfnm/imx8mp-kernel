@@ -19,7 +19,8 @@
     la9310_wdog: la9310_wdog@0 {
         compatible = "la9310_wdog";
         la9310-trst-gpios = <&gpio3 9 GPIO_ACTIVE_HIGH>;
-		la9310-hrst-gpios = <&gpio3 14 GPIO_ACTIVE_HIGH>;                
+		la9310-hrst-gpios = <&gpio3 14 GPIO_ACTIVE_HIGH>;   
+		la9310-bootstrap-en-gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;             
     };
 
 
@@ -31,28 +32,53 @@
 
 	
 	reserved-memory {
-           /* /delete-node/ dsp_reserved;
-            /delete-node/ dsp_reserved_heap;
-            /delete-node/ dsp_vdev0vring0;
-            /delete-node/ dsp_vdev0vring1;
-            /delete-node/ dsp_vdev0buffer;
-           // /delete-note/ isp0_reserved;
-			*/
+			dsp_reserved: dsp@92400000 {
+				status = "disabled";
+			};
+			dsp_reserved_heap: dsp_reserved_heap {
+				status = "disabled";
+			};
+			dsp_vdev0vring0: vdev0vring0@942f0000 {
+				status = "disabled";
+			};
+			dsp_vdev0vring1: vdev0vring1@942f8000 {
+				status = "disabled";
+			};
+			dsp_vdev0buffer: vdev0buffer@94300000 {
+				status = "disabled";
+			};			
+
+			iqlocal: iqlocale@82400000 {
+				reg = <0 0x82400000 0 0x10000000>;
+				//compatible = "shared-dma-pool";
+				no-map;
+				//compatible = "removed-dma-pool";
+			};
+			
 			la93: la93@92400000 {
 				reg = <0 0x92400000 0 0x4000000>;
 				no-map;
 			};
-			iqflood: iq@96400000 {
-				reg = <0 0x96400000 0 0xD000000>;
+			iqflood: iqflood@96400000 {
+				reg = <0 0x96400000 0 0x7000000>; //0xD000000
+				//compatible = "shared-dma-pool";
+				no-map;
+				//compatible = "removed-dma-pool";
+			};
+			iqusb: iqusb@9D400000 {
+				reg = <0 0x9D400000 0 0x6000000>;
 				//compatible = "shared-dma-pool";
 				//no-map;
 				//compatible = "removed-dma-pool";
 			};
+			
 			bootconfig: bootconfig@A3400000 {
 				reg = <0 0xA3400000 0 0x400000>;
 				// uboot was modified to clear this memory (with 0xff)
 				no-map;
 			};
+
+			
 
 
 
@@ -290,6 +316,7 @@
 };
 
 &usb_dwc3_0 {
+	//dr_mode = "otg";
 	dr_mode = "otg";
 	hnp-disable;
 	srp-disable;
@@ -308,15 +335,11 @@
 &usb3_phy1 {
 	fsl,phy-tx-preemp-amp-tune = <3>;
 	fsl,phy-tx-vref-tune = <0xb>;
+	vbus-power-supply = <&fusb302>;
 	status = "okay";
 };
 
 &usb3_1 {
-	status = "okay";
-};
-
-&usb3_phy1 {
-	vbus-power-supply = <&fusb302>;
 	status = "okay";
 };
 
@@ -369,9 +392,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_typec>;
 		reg = <0x22>;
-		//interrupt-parent = <&gpio4>;
-        //interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
-		fcs,int_n = <&gpio4 24 GPIO_ACTIVE_HIGH>;
+		interrupt-parent = <&gpio4>;
+        interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		fcs,int_n-gpios = <&gpio4 24 GPIO_ACTIVE_LOW>;
         vbus-supply = <&vbus_typec>;
 
 		port {
@@ -387,12 +410,12 @@
 			power-role = "sink";
 			try-power-role = "sink";
 			data-role = "dual";
-			//source-pdos = <PDO_FIXED(5000, 2500, PDO_FIXED_USB_COMM)>;
 			sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)
-				     	 PDO_FIXED(9000, 2000, PDO_FIXED_USB_COMM)
-						 PDO_FIXED(12000, 2000, PDO_FIXED_USB_COMM)
-						 PDO_FIXED(15000, 1500, PDO_FIXED_USB_COMM)
-						 PDO_VAR(5000, 15000, 3000)>;
+							PDO_FIXED(9000, 2000, PDO_FIXED_USB_COMM)
+							PDO_FIXED(12000, 2000, PDO_FIXED_USB_COMM)
+							PDO_FIXED(15000, 1500, PDO_FIXED_USB_COMM)
+							PDO_VAR(5000, 15000, 3000)
+							>;
 			op-sink-microwatt = <1000000>;
 			//self-powered;
 
@@ -414,6 +437,7 @@
 		compatible = "ti,tmp102";
 		reg = <0x48>;
 	};      
+
 	
 	si5510@58{
 		compatible = "rfnm,si5510";

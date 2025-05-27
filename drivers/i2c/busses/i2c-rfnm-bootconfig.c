@@ -250,7 +250,7 @@ static ssize_t rfnm_factory_use_only_store(struct device *dev, struct device_att
 static DEVICE_ATTR_WO(rfnm_factory_use_only);
 
 
-
+/*
 static ssize_t rfnm_set_dcs_freq_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
 
 	struct i2c_client *client = to_i2c_client(dev);
@@ -300,7 +300,7 @@ static ssize_t rfnm_set_dcs_freq_store(struct device *dev, struct device_attribu
 }
 
 static DEVICE_ATTR_WO(rfnm_set_dcs_freq);
-
+*/
 
 
 
@@ -355,10 +355,10 @@ static int rfnm_bootconfig_probe(struct i2c_client *client) {
 			printk("RFNM: failed to create device file for rfnm_display_user_config");
 		}
 
-		err = device_create_file(&client->dev, &dev_attr_rfnm_set_dcs_freq);
-		if (err < 0) {
-			printk("RFNM: failed to create device file for rfnm_set_dcs_freq");
-		}
+		//err = device_create_file(&client->dev, &dev_attr_rfnm_set_dcs_freq);
+		//if (err < 0) {
+		//	printk("RFNM: failed to create device file for rfnm_set_dcs_freq");
+		//}
 	}
 
 	
@@ -374,7 +374,7 @@ static int rfnm_bootconfig_remove(struct i2c_client *client) {
 
 	if(adapter->nr == 0) {
 		device_remove_file(&client->dev, &(dev_attr_rfnm_display_user_config));
-		device_remove_file(&client->dev, &(dev_attr_rfnm_set_dcs_freq));
+		//device_remove_file(&client->dev, &(dev_attr_rfnm_set_dcs_freq));
 	}
 	return 0;
 }
