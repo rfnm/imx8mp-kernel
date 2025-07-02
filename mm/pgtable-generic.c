@@ -305,6 +305,8 @@ nomap:
 	return NULL;
 }
 
+EXPORT_SYMBOL(__pte_offset_map);
+
 pte_t *pte_offset_map_nolock(struct mm_struct *mm, pmd_t *pmd,
 			     unsigned long addr, spinlock_t **ptlp)
 {

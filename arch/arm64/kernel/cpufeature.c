@@ -430,6 +430,8 @@ struct arm64_ftr_reg arm64_ftr_reg_ctrel0 = {
 	.override	= &no_override,
 };
 
+EXPORT_SYMBOL(arm64_ftr_reg_ctrel0);
+
 static const struct arm64_ftr_bits ftr_id_mmfr0[] = {
 	S_ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_LOWER_SAFE, ID_MMFR0_EL1_InnerShr_SHIFT, 4, 0xf),
 	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_LOWER_SAFE, ID_MMFR0_EL1_FCSE_SHIFT, 4, 0),

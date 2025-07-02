@@ -130,6 +130,7 @@ struct imx6_pcie_drvdata {
 struct imx6_pcie {
 	struct dw_pcie		*pci;
 	int			reset_gpio;
+	bool			suspended;
 	int			host_wake_irq;
 	bool			gpio_active_high;
 	bool			link_is_up;
@@ -1746,6 +1747,9 @@ static int imx6_pcie_suspend_noirq(struct device *dev)
 	if (!(imx6_pcie->drvdata->flags & IMX6_PCIE_FLAG_SUPPORTS_SUSPEND))
 		return 0;
 
+	if (imx6_pcie->suspended)
+		return 0;
+
 	if (unlikely(imx6_pcie->drvdata->variant == IMX6Q)) {
 		/*
 		 * L2 can exit by 'reset' or Inband beacon (from remote EP)
@@ -1763,6 +1767,8 @@ static int imx6_pcie_suspend_noirq(struct device *dev)
 		imx6_pcie_host_exit(pp);
 	}
 
+	imx6_pcie->suspended = true;
+
 	return 0;
 }
 
@@ -1771,6 +1777,9 @@ static int imx6_pcie_resume_noirq(struct device *dev)
 	int ret;
 	struct imx6_pcie *imx6_pcie = dev_get_drvdata(dev);
 	struct dw_pcie_rp *pp = &imx6_pcie->pci->pp;
+
+	if (!imx6_pcie->suspended)
+		return 0;
 
 	if (!(imx6_pcie->drvdata->flags & IMX6_PCIE_FLAG_SUPPORTS_SUSPEND))
 		return 0;
@@ -1794,6 +1803,8 @@ static int imx6_pcie_resume_noirq(struct device *dev)
 		if (imx6_pcie->link_is_up)
 			imx6_pcie_start_link(imx6_pcie->pci);
 	}
+
+	imx6_pcie->suspended = false;
 
 	return 0;
 }
@@ -1837,6 +1848,37 @@ irqreturn_t host_wake_irq_handler(int irq, void *priv)
 
 	return IRQ_HANDLED;
 }
+
+static ssize_t pcie_dis_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	u32 val;
+
+	ret = sscanf(buf, "%x\n", &val);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (val) {
+		dev_info(dev, "suspend pcie device\n");
+		imx6_pcie_suspend_noirq(dev);
+	} else {
+		dev_info(dev, "resume pcie device\n");
+		imx6_pcie_resume_noirq(dev);
+	}
+
+	return count;
+}
+static DEVICE_ATTR_WO(pcie_dis);
+
+static struct attribute *imx_pcie_rc_attrs[] = {
+	&dev_attr_pcie_dis.attr,
+	NULL
+};
+
+static struct attribute_group imx_pcie_attrgroup = {
+	.attrs	= imx_pcie_rc_attrs,
+};
 
 static int imx6_pcie_probe(struct platform_device *pdev)
 {
@@ -2106,6 +2148,12 @@ static int imx6_pcie_probe(struct platform_device *pdev)
 		if (ret < 0)
 			return ret;
 	} else {
+		ret = sysfs_create_group(&pdev->dev.kobj, &imx_pcie_attrgroup);
+		if (ret) {
+			printk("RFNM pcie sysfs_create_group\n");
+			return ret;
+		}
+
 		ret = dw_pcie_host_init(&pci->pp);
 		if (ret < 0)
 			return ret;

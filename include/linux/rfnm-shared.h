@@ -176,7 +176,7 @@ void rfnm_populate_dev_rx_chlist(struct rfnm_dev_rx_ch_list * r_chlist);
 void rfnm_apply_dev_tx_chlist(struct rfnm_dev_tx_ch_list * r_chlist);
 void rfnm_apply_dev_rx_chlist(struct rfnm_dev_rx_ch_list * r_chlist);
 void rfnm_populate_dev_set_res(struct rfnm_dev_get_set_result * r_res);
-void rfnm_set_dcs_freq_user(uint64_t freq);
+void rfnm_set_samp_rate_user(uint64_t freq);
 int rfnm_la9310_stream(uint64_t user_dcs_hz, uint8_t tx, uint8_t *rx);
 void rfnm_populate_dev_status(struct rfnm_dev_status * r_stat);
 void rfnm_restart_sm(int hard);

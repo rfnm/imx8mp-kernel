@@ -34,6 +34,9 @@
 // bit order is inverted in LA?
 #define RFNM_DGB_LA_FE_CLK ((6 << R_DBG_S_PRI_BANK) | (24 << R_DBG_S_PRI_NUM) | (6 << R_DBG_S_SEC_BANK) | (23 << R_DBG_S_SEC_NUM))
 
+#define RFNM_GPIO4_RB_3V3 ((1 << R_DBG_S_PRI_BANK) | (6 << R_DBG_S_PRI_NUM) | (1 << R_DBG_S_SEC_BANK) | (11 << R_DBG_S_SEC_NUM))
+#define RFNM_GPIO4_RB_1V8_SHARED ((1 << R_DBG_S_PRI_BANK) | (5 << R_DBG_S_PRI_NUM) | (1 << R_DBG_S_SEC_BANK) | (5 << R_DBG_S_SEC_NUM))
+
 
 void rfnm_gpio_set(uint8_t dgb_id, uint32_t gpio_map_id);
 void rfnm_gpio_clear(uint8_t dgb_id, uint32_t gpio_map_id);

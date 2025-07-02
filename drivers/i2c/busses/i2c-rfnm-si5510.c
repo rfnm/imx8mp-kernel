@@ -228,12 +228,12 @@ static ssize_t rfnm_ext_ref_out_store(struct device *dev, struct device_attribut
 
 	struct i2c_client *client = to_i2c_client(dev);
 
-	if(buf[1] != 'n' && buf[1] != 'f') {
+	if(buf[1] != 'n' && buf[1] != 'f' && buf[1] != '0' && buf[1] != '1') {
 		printk("RFNM: Si5510: Valid inputs are either 'on' or 'off'");
 		return -EINVAL;
 	}
 
-	if(buf[1] == 'n') {
+	if(buf[1] == 'n' || buf[1] == '1') {
 		printk("RFNM: Si5510: enabling ext reference output @ 10 MHz\n");
 		rfnm_si5510_set_output_status(client, 9, 1);
 	} else {
@@ -324,6 +324,28 @@ void rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq) {
 
 EXPORT_SYMBOL(rfnm_si5510_set_dcs_freq);
 
+void rfnm_si5510_set_dco(struct i2c_client *client, int32_t val) {
+	uint8_t i2c_read_buf[32];
+	uint8_t send_dco_request[] = { 0xF0, 0x0F, 0x24, 0x01, 0x00, 0x00, 0x00, 0x00 };
+	uint8_t i;
+
+	for(i = 0; i < 4; i++)
+		send_dco_request[4 + i] = (val >> (i << 3)) & 0xFF;
+
+	rfnm_si5510_i2c_write(client, send_dco_request, 8);
+	rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 2);
+
+	if(((i2c_read_buf[0] & 0xf0 ) == 0x80) && ((i2c_read_buf[1] & 0x01 ) == 0x00)) {
+		printk("RFNM: Si5510 DCO set to %d ppb\n", val);
+	}
+	else {
+		printk("RFNM: failed to set Si5510 DCO\n", val);
+	}
+}
+
+EXPORT_SYMBOL(rfnm_si5510_set_dco);
+
+
 uint32_t rfnm_si5510_get_dcs_freq(struct i2c_client *client) {
 	return rfnm_dcs_freq_hz;
 }
@@ -354,6 +376,31 @@ static ssize_t rfnm_set_dcs_freq_store(struct device *dev, struct device_attribu
 }
 
 static DEVICE_ATTR_WO(rfnm_set_dcs_freq);
+
+
+
+static ssize_t rfnm_set_dco_ppb_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
+
+	struct i2c_client *client = to_i2c_client(dev);
+	
+	int32_t dco_offset;
+
+    if (kstrtos32(&buf[0], 10, &dco_offset) != 0) {
+		return -EINVAL;
+	}
+
+	//if(reqfreq < 1000 || reqfreq > 2000000) {
+	//	printk("RFNM: Invalid DCS frequency requested, valid range is [1 - 200] MHz, expressed in KHz. Eg, 122880 for 122.88 MHz\n");
+	//	return -EINVAL;
+	//}
+
+	rfnm_si5510_set_dco(client, dco_offset);
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(rfnm_set_dco_ppb);
+
 
 
 
@@ -388,6 +435,7 @@ void rfnm_si5510_load_from_map(struct i2c_client *client, int offset, int map, i
 
 
 
+
 static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	int i;
@@ -415,10 +463,6 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 		return -EPROBE_DEFER;
 	}
 
-	// hack 
-	if(cfg->daughterboard_eeprom[0].board_id == RFNM_DAUGHTERBOARD_YUCCA) {
-		cfg->daughterboard_eeprom[0].board_id = RFNM_DAUGHTERBOARD_GRANITA;
-	}
 #if 0
 	s64  uptime_ms;
     uptime_ms = ktime_to_ms(ktime_get_boottime());
@@ -513,7 +557,17 @@ repeat_search:
 		goto repeat_search;
 	}*/
 
-	if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA)) {
+	
+	if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_YUCCA, RFNM_DAUGHTERBOARD_YUCCA)) {
+		//rfnm_si5510_load_from_map(client, dcs_map_offset, 1);
+		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len);
+		printk("RFNM: Selected plan 1 RFNM_DAUGHTERBOARD_YUCCA, RFNM_DAUGHTERBOARD_YUCCA\n");
+
+		// this yucca plan does not take all dgb combinations into account! 
+
+
+
+	} else if(can_use_si5510_config(cfg, RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA)) {
 		//rfnm_si5510_load_from_map(client, dcs_map_offset, 1);
 		rfnm_si5510_host_load(client, Q_Plan1_boot_bin, Q_Plan1_boot_bin_len);
 		printk("RFNM: Selected plan 1 RFNM_DAUGHTERBOARD_GRANITA, RFNM_DAUGHTERBOARD_GRANITA\n");
@@ -593,6 +647,8 @@ repeat_search:
 
 	// release LA9310 GPIOs for people to play with it in userspace (JTAG, etc).
 
+	
+	gpiod_put(power_en_09_gpio);
 	gpiod_put(la9310_trst_gpio);
 	gpiod_put(la9310_hrst_gpio);
 	gpiod_put(la9310_bootstrap_en_gpio);
@@ -612,6 +668,11 @@ repeat_search:
 	err = device_create_file(&client->dev, &dev_attr_rfnm_set_dcs_freq);
 	if (err < 0) {
 		printk("RFNM: failed to create device file for rfnm_set_dcs_freq");
+	}
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_set_dco_ppb);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_set_dco_ppb");
 	}
 	//device_remove_file(&client->dev, &(dev_attr_rfnm_show_board_info));
 

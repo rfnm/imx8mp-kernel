@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/rfnm-shared.h>
 
 #include <dt-bindings/phy/phy-imx8-pcie.h>
 
@@ -292,6 +293,16 @@ __setup("pcie_phy_tuned=", imx8_pcie_phy_fine_tune);
 
 static int imx8_pcie_phy_probe(struct platform_device *pdev)
 {
+	struct rfnm_bootconfig *cfg;
+	struct rfnm_eeprom_data *eeprom_data;
+	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
+
+	if(cfg->pcie_clock_ready == 0xff) {
+		printk("RFNM: Deferring PCIe probe...\n");
+		memunmap(cfg);
+		return -EPROBE_DEFER;
+	}
+
 	struct phy_provider *phy_provider;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
@@ -359,6 +370,8 @@ static int imx8_pcie_phy_probe(struct platform_device *pdev)
 	phy_set_drvdata(imx8_phy->phy, imx8_phy);
 
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
+
+	printk("RFNM: PCIe started\n");
 
 	return PTR_ERR_OR_ZERO(phy_provider);
 }

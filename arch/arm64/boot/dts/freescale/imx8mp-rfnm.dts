@@ -5,6 +5,7 @@
 
 /dts-v1/;
 
+#include <dt-bindings/phy/phy-imx8-pcie.h>
 #include <dt-bindings/usb/pd.h>
 #include "imx8mp.dtsi"
 
@@ -30,6 +31,11 @@
 		      <0x1 0x00000000 0 0x80000000>;
 	};
 
+	pcie0_refclk: pcie0-refclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <100000000>;
+	};
 	
 	reserved-memory {
 			dsp_reserved: dsp@92400000 {
@@ -85,19 +91,19 @@
 
 
 
-			m4_reserved: m4@0x80000000 {
+			m4_reserved: m4@80000000 {
 				no-map;
 				reg = <0 0x80000000 0 0x1000000>;
 			};
-			m7_ddr_alias: m4@0x10000000 {
+			m7_ddr_alias: m4@10000000 {
 				no-map;
 				reg = <0 0x10000000 0 0x1000000>;
 			};
-			m7_itcm: m4@0x7E0000 {
+			m7_itcm: m4@7E0000 {
 				no-map;
 				reg = <0 0x7E0000 0 0x20000>;
 			};
-			m7_dtcm: m4@0x800000 {
+			m7_dtcm: m4@800000 {
 				no-map;
 				reg = <0 0x800000 0 0x20000>;
 			};
@@ -226,6 +232,9 @@
 		pinctrl-0 = <&pinctrl_typec_mux>;
 		switch-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
 		orientation-switch;
+		status = "okay";
+		tcpc-handle = <&fusb302>;
+
 
 		port {
 			usb3_data_ss: endpoint {
@@ -237,11 +246,12 @@
 	
 	
 	
+
 	vbus_typec: vbus-typec-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vbus_typec";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
 		regulator-always-on;
 		status = "okay";
 	};
@@ -301,7 +311,8 @@
 };
 
 &usb3_phy0 {
-	vbus-power-supply = <&fusb302>;
+	//vbus-power-supply = <&fusb302>;
+	vbus-supply = <&vbus_typec>;
 	fsl,phy-tx-vref-tune = <0xe>;
 	fsl,phy-tx-preemp-amp-tune = <3>;
 	fsl,phy-tx-vboost-level = <5>;
@@ -324,6 +335,10 @@
 	snps,dis-u1-entry-quirk;
 	snps,dis-u2-entry-quirk;
 	status = "okay";
+	vbus-supply = <&vbus_typec>;
+
+	usb-role-switch; 
+	role-switch-default-mode = "device"; 
 
 	port {
 		usb3_drd_sw: endpoint {
@@ -335,7 +350,7 @@
 &usb3_phy1 {
 	fsl,phy-tx-preemp-amp-tune = <3>;
 	fsl,phy-tx-vref-tune = <0xb>;
-	vbus-power-supply = <&fusb302>;
+	//vbus-power-supply = <&fusb302>;
 	status = "okay";
 };
 
@@ -395,6 +410,7 @@
 		interrupt-parent = <&gpio4>;
         interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
 		fcs,int_n-gpios = <&gpio4 24 GPIO_ACTIVE_LOW>;
+		//fusb340-switch-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
         vbus-supply = <&vbus_typec>;
 
 		port {
@@ -601,9 +617,25 @@
 	};   
 };
 
+&pcie_phy {
+	fsl,refclk-pad-mode = <IMX8_PCIE_REFCLK_PAD_INPUT>;
+	clocks = <&pcie0_refclk>;
+	clock-names = "ref";
+	status = "okay";
+	//ext_osc = <1>;
+};
 
+&pcie {
+	//pinctrl-names = "default";
+	//pinctrl-0 = <&pinctrl_pcie0>;
+	//reset-gpio = <&gpio2 7 GPIO_ACTIVE_LOW>;
+	//host-wake-gpio = <&gpio5 21 GPIO_ACTIVE_LOW>;
+	//vpcie-supply = <&reg_pcie0>;
+	status = "okay";
+	l1ss-disabled;
+};
 
-
+/*
 &pcie{
 	//pinctrl-names = "default";
 	//pinctrl-0 = <&pinctrl_pcie>;
@@ -622,15 +654,8 @@
 				 <&clk IMX8MP_SYS_PLL2_50M>;
 	l1ss-disabled;
 	status = "okay";
-/*
-	wifi_wake_host {
-		compatible = "nxp,wifi-wake-host";
-		interrupt-parent = <&gpio5>;
-		interrupts = <21 IRQ_TYPE_LEVEL_LOW>;
-		interrupt-names = "host-wake";
-	};
-*/
 };
+*/
 
 &pcie_ep{
 	//pinctrl-names = "default";
@@ -649,10 +674,10 @@
 	status = "disabled";
 };
 
-&pcie_phy{
-	ext_osc = <1>;
-	status = "okay";
-};
+//&pcie_phy{
+//	ext_osc = <1>;
+//	status = "okay";
+//};
 
 
 &snvs_pwrkey {
@@ -706,7 +731,7 @@
 };
 
 &lcdif3 {
-	status = "disabled";
+	status = "okay";
 
 	thres-low  = <1 2>;             /* (FIFO * 1 / 2) */
 	thres-high = <3 4>;             /* (FIFO * 3 / 4) */
@@ -748,7 +773,7 @@
 	// resets the CS line in multi-byte transfers for no reasons
 	// fix by telling the driver to use a GPIO as SS
 
-	//num-cs = <2>; 
+	//num-cs = <1>; 
 	//cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>, <&gpio3 22 GPIO_ACTIVE_LOW>;
 	cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
 	status = "okay";
@@ -763,7 +788,7 @@
 	spirfnmdaghterboard1: spi@0 {
 		reg = <0>;
 		compatible = "rfnm,daughterboard";
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <10000000>;
 	};
 /*
 	spilime0: spi@0 {
@@ -785,8 +810,10 @@
 	fsl,spi-num-chipselects = <1>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ecspi2>;
+	//num-cs = <1>;
 	cs-gpios = <&gpio5 13 GPIO_ACTIVE_LOW>;
 	status = "okay";
+	fsl,spi-csd-ctl = <1>;
 
 	/*spidev3: spi@0 {
 		reg = <0>;
@@ -797,7 +824,7 @@
 	spirfnmdaghterboard2: spi@0 {
 		reg = <0>;
 		compatible = "rfnm,daughterboard";
-		spi-max-frequency = <1000000>;
+		spi-max-frequency = <10000000>;
 	};
 };
 
@@ -835,7 +862,7 @@
             MX8MP_IOMUXC_ECSPI1_MOSI__ECSPI1_MOSI      0x82
             MX8MP_IOMUXC_ECSPI1_SCLK__ECSPI1_SCLK      0x82
             //MX8MP_IOMUXC_ECSPI1_SS0__ECSPI1_SS0        0x86
-			MX8MP_IOMUXC_ECSPI1_SS0__GPIO5_IO09		0x00000106 // SS granita
+			MX8MP_IOMUXC_ECSPI1_SS0__GPIO5_IO09		0x1c4 // SS granita
 			MX8MP_IOMUXC_SAI5_RXD1__GPIO3_IO22		0x00000106 // SS RFFC
 
 			MX8MP_IOMUXC_SAI5_RXD0__GPIO3_IO21		0x00000106 // RFFC NRST pin
@@ -862,8 +889,13 @@
 			MX8MP_IOMUXC_SAI5_RXD2__GPIO3_IO23			0x00000106
 			MX8MP_IOMUXC_SAI5_MCLK__GPIO3_IO25			0x00000106
 
-			MX8MP_IOMUXC_SAI2_MCLK__GPIO4_IO27         0x00000106 // PPS_IN select
-			MX8MP_IOMUXC_SAI5_RXFS__GPIO3_IO19         0x00000106 // PPS_IN select
+			MX8MP_IOMUXC_SAI2_MCLK__GPIO4_IO27          0x00000106 // PPS_IN select
+			MX8MP_IOMUXC_SAI5_RXFS__GPIO3_IO19          0x00000106 // PPS_IN select
+
+
+			//MX8MP_IOMUXC_GPIO1_IO06__GPIO1_IO06         0x00000106 // rba 3.3v
+			//MX8MP_IOMUXC_GPIO1_IO11__GPIO1_IO11       0x00000106 // rbb 3.3v
+			//MX8MP_IOMUXC_GPIO1_IO05__GPIO1_IO05         0x00000106 // rb 1.8v
 
 		>;
 	};
@@ -874,7 +906,7 @@
             MX8MP_IOMUXC_ECSPI2_MOSI__ECSPI2_MOSI      0x82
             MX8MP_IOMUXC_ECSPI2_SCLK__ECSPI2_SCLK      0x82
             //MX8MP_IOMUXC_ECSPI2_SS0__ECSPI2_SS0        0x86
-			MX8MP_IOMUXC_ECSPI2_SS0__GPIO5_IO13			0x00000106
+			MX8MP_IOMUXC_ECSPI2_SS0__GPIO5_IO13			0x1c4
 		>;
 	};
     

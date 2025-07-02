@@ -644,13 +644,13 @@ static int mx51_ecspi_prepare_message(struct spi_imx_data *spi_imx,
 			spi_imx_target_dma_convert(xfer, DMA_TO_DEVICE);
 	};
 
-
+#if 1
 	   /* set chip select delay */
     period = readl(spi_imx->base + MX51_ECSPI_PERIODREG);
     period &= MX51_ECSPI_PERIODREG_CSDCTL(0x3f);
     period |= MX51_ECSPI_PERIODREG_CSDCTL(spi_imx->csd_ctl);
     writel(period, spi_imx->base + MX51_ECSPI_PERIODREG);
-
+#endif
 	/*
 	 * eCSPI burst completion by Chip Select signal in Target mode
 	 * is not functional for imx53 Soc, config SPI burst completed when
