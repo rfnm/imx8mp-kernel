@@ -182,5 +182,12 @@ void rfnm_populate_dev_status(struct rfnm_dev_status * r_stat);
 void rfnm_restart_sm(int hard);
 int rfnm_dev_process_udp_ctrl(uint32_t cmd, uint32_t *size, uint8_t *buf);
 
+int rfnm_board_reset_la9310(void);
+int rfnm_pcie_rc_set_disabled(bool disabled);
+int rfnm_la9310_hard_reprobe(void);
+int rfnm_hard_reset_la9310(void);
+int rfnm_schedule_hard_reset_la9310(void);
+int rfnm_get_hard_reset_la9310_status(void);
+
 
 #endif

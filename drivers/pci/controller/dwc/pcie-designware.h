@@ -61,9 +61,9 @@
 	set_bit(DW_PCIE_CAP_ ## _cap, &(_pci)->caps)
 
 /* Parameters for the waiting for link up routine */
-#define LINK_WAIT_MAX_RETRIES		10
-#define LINK_WAIT_USLEEP_MIN		90000
-#define LINK_WAIT_USLEEP_MAX		100000
+#define LINK_WAIT_TIMEOUT_US		1000000
+#define LINK_WAIT_USLEEP_MIN		1000
+#define LINK_WAIT_USLEEP_MAX		2000
 
 /* Parameters for the waiting for iATU enabled routine */
 #define LINK_WAIT_MAX_IATU_RETRIES	5

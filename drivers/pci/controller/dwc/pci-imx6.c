@@ -18,6 +18,7 @@
 #include <linux/mfd/syscon/imx6q-iomuxc-gpr.h>
 #include <linux/mfd/syscon/imx7-iomuxc-gpr.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/of_address.h>
@@ -34,6 +35,7 @@
 #include <linux/phy/phy.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/rfnm-shared.h>
 
 #include "pcie-designware.h"
 
@@ -182,6 +184,9 @@ struct imx6_pcie {
 	struct phy		*phy;
 	const struct imx6_pcie_drvdata *drvdata;
 };
+
+static DEFINE_MUTEX(rfnm_pcie_rc_lock);
+static struct device *rfnm_pcie_rc_dev;
 
 /* Parameters for the waiting for PCIe PHY PLL to lock on i.MX7 */
 #define PHY_PLL_LOCK_WAIT_USLEEP_MAX	200
@@ -1936,6 +1941,31 @@ irqreturn_t host_wake_irq_handler(int irq, void *priv)
 	return IRQ_HANDLED;
 }
 
+int rfnm_pcie_rc_set_disabled(bool disabled)
+{
+	struct device *dev;
+	int ret;
+
+	mutex_lock(&rfnm_pcie_rc_lock);
+	dev = rfnm_pcie_rc_dev;
+	if (!dev) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	dev_info(dev, "RFNM: %s PCIe RC\n", disabled ? "suspend" : "resume");
+	if (disabled) {
+		ret = imx6_pcie_suspend_noirq(dev);
+	} else {
+		ret = imx6_pcie_resume_noirq(dev);
+	}
+
+out:
+	mutex_unlock(&rfnm_pcie_rc_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(rfnm_pcie_rc_set_disabled);
+
 static ssize_t pcie_dis_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -1946,13 +1976,7 @@ static ssize_t pcie_dis_store(struct device *dev,
 	if (ret != 1)
 		return -EINVAL;
 
-	if (val) {
-		dev_info(dev, "suspend pcie device\n");
-		ret = imx6_pcie_suspend_noirq(dev);
-	} else {
-		dev_info(dev, "resume pcie device\n");
-		ret = imx6_pcie_resume_noirq(dev);
-	}
+	ret = rfnm_pcie_rc_set_disabled(val != 0);
 	if (ret) {
 		dev_err(dev, "pcie_dis %u failed: %d\n", val, ret);
 		return ret;
@@ -2239,15 +2263,27 @@ static int imx6_pcie_probe(struct platform_device *pdev)
 		if (ret < 0)
 			return ret;
 	} else {
+		mutex_lock(&rfnm_pcie_rc_lock);
+		rfnm_pcie_rc_dev = dev;
+		mutex_unlock(&rfnm_pcie_rc_lock);
+
 		ret = sysfs_create_group(&pdev->dev.kobj, &imx_pcie_attrgroup);
 		if (ret) {
 			printk("RFNM pcie sysfs_create_group\n");
+			mutex_lock(&rfnm_pcie_rc_lock);
+			rfnm_pcie_rc_dev = NULL;
+			mutex_unlock(&rfnm_pcie_rc_lock);
 			return ret;
 		}
 
 		ret = dw_pcie_host_init(&pci->pp);
-		if (ret < 0)
+		if (ret < 0) {
+			sysfs_remove_group(&pdev->dev.kobj, &imx_pcie_attrgroup);
+			mutex_lock(&rfnm_pcie_rc_lock);
+			rfnm_pcie_rc_dev = NULL;
+			mutex_unlock(&rfnm_pcie_rc_lock);
 			return ret;
+		}
 
 		if (pci_msi_enabled()) {
 			u8 offset = dw_pcie_find_capability(pci, PCI_CAP_ID_MSI);

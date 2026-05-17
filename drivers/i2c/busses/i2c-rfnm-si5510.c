@@ -7,6 +7,7 @@
 #include <linux/rfnm-si5510.h>
 #include <linux/printk.h>
 #include <linux/i2c.h>
+#include <linux/mutex.h>
 
 #include <linux/ktime.h>
 
@@ -405,13 +406,14 @@ static DEVICE_ATTR_WO(rfnm_set_dco_ppb);
 
 
 
-struct gpio_desc *si5510_rst_gpio;
-struct gpio_desc *la9310_trst_gpio;
-struct gpio_desc *la9310_hrst_gpio;
-struct gpio_desc *la9310_bootstrap_en_gpio;
+static struct gpio_desc *si5510_rst_gpio;
+static struct gpio_desc *la9310_trst_gpio;
+static struct gpio_desc *la9310_hrst_gpio;
+static struct gpio_desc *la9310_bootstrap_en_gpio;
 
-struct gpio_desc *power_en_09_gpio;
-struct gpio_desc *la9310_power_en_gpio;
+static struct gpio_desc *power_en_09_gpio;
+static struct gpio_desc *la9310_power_en_gpio;
+static DEFINE_MUTEX(rfnm_la9310_reset_lock);
 
 static void rfnm_si5510_put_la9310_gpios(void) {
 	if(!IS_ERR_OR_NULL(power_en_09_gpio)) {
@@ -439,6 +441,11 @@ static void rfnm_si5510_put_la9310_gpios(void) {
 
 static int rfnm_si5510_get_la9310_gpios(struct device *dev) {
 	int error;
+
+	if(!IS_ERR_OR_NULL(la9310_trst_gpio) && !IS_ERR_OR_NULL(la9310_hrst_gpio) && !IS_ERR_OR_NULL(la9310_bootstrap_en_gpio) &&
+			!IS_ERR_OR_NULL(power_en_09_gpio) && !IS_ERR_OR_NULL(la9310_power_en_gpio)) {
+		return 0;
+	}
 
 	la9310_trst_gpio = gpiod_get(dev, "la9310-trst", GPIOD_OUT_LOW);
 	if (IS_ERR(la9310_trst_gpio)) {
@@ -482,12 +489,15 @@ err:
 	return error;
 }
 
-static int rfnm_si5510_reset_la9310(struct device *dev) {
+static int rfnm_si5510_reset_la9310(void) {
 	int error;
 
-	error = rfnm_si5510_get_la9310_gpios(dev);
-	if(error) {
-		return error;
+	mutex_lock(&rfnm_la9310_reset_lock);
+
+	if(IS_ERR_OR_NULL(la9310_trst_gpio) || IS_ERR_OR_NULL(la9310_hrst_gpio) || IS_ERR_OR_NULL(la9310_bootstrap_en_gpio) ||
+			IS_ERR_OR_NULL(power_en_09_gpio) || IS_ERR_OR_NULL(la9310_power_en_gpio)) {
+		error = -ENODEV;
+		goto out;
 	}
 
 	gpiod_set_value_cansleep(la9310_hrst_gpio, 0);
@@ -509,10 +519,17 @@ static int rfnm_si5510_reset_la9310(struct device *dev) {
 
 	printk("RFNM: Performed LA9310 reset\n");
 
-	rfnm_si5510_put_la9310_gpios();
+	error = 0;
 
-	return 0;
+out:
+	mutex_unlock(&rfnm_la9310_reset_lock);
+	return error;
 }
+
+int rfnm_board_reset_la9310(void) {
+	return rfnm_si5510_reset_la9310();
+}
+EXPORT_SYMBOL_GPL(rfnm_board_reset_la9310);
 
 static ssize_t rfnm_reset_la9310_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
 	int error;
@@ -522,7 +539,7 @@ static ssize_t rfnm_reset_la9310_store(struct device *dev, struct device_attribu
 		return -EINVAL;
 	}
 
-	error = rfnm_si5510_reset_la9310(dev);
+	error = rfnm_board_reset_la9310();
 	if(error) {
 		return error;
 	}
@@ -705,7 +722,12 @@ repeat_search:
 
 	cfg->pcie_clock_ready = 1;
 
-	error = rfnm_si5510_reset_la9310(&client->dev);
+	error = rfnm_si5510_get_la9310_gpios(&client->dev);
+	if(error) {
+		return error;
+	}
+
+	error = rfnm_si5510_reset_la9310();
 	if(error) {
 		return error;
 	}

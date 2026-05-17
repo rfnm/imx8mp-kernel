@@ -15,6 +15,7 @@
 #include <linux/dma/edma.h>
 #include <linux/gpio/consumer.h>
 #include <linux/ioport.h>
+#include <linux/jiffies.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
@@ -647,19 +648,20 @@ void dw_pcie_disable_atu(struct dw_pcie *pci, u32 dir, int index)
 int dw_pcie_wait_for_link(struct dw_pcie *pci)
 {
 	u32 offset, val;
-	int retries;
+	unsigned long deadline;
 
 	/* Check if the link is up or not */
-	for (retries = 0; retries < LINK_WAIT_MAX_RETRIES; retries++) {
-		if (dw_pcie_link_up(pci))
+	deadline = jiffies + usecs_to_jiffies(LINK_WAIT_TIMEOUT_US);
+	for (;;) {
+		if (dw_pcie_link_up(pci)) {
 			break;
+		}
 
+		if (time_after(jiffies, deadline)) {
+			dev_info(pci->dev, "Phy link never came up\n");
+			return -ETIMEDOUT;
+		}
 		usleep_range(LINK_WAIT_USLEEP_MIN, LINK_WAIT_USLEEP_MAX);
-	}
-
-	if (retries >= LINK_WAIT_MAX_RETRIES) {
-		dev_info(pci->dev, "Phy link never came up\n");
-		return -ETIMEDOUT;
 	}
 
 	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
