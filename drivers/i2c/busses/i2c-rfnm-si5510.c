@@ -9,15 +9,13 @@
 #include <linux/i2c.h>
 #include <linux/mutex.h>
 
-#include <linux/ktime.h>
-
-
 typedef unsigned char       uint8_t;
 typedef   signed char        int8_t;
 
 uint32_t RFNM_SI5510_CMD_BUFFER_SIZE;
 
 uint32_t rfnm_dcs_freq_hz;
+static struct i2c_client *rfnm_si5510_client;
 
 void rfnm_si5510_i2c_read(struct i2c_client *client, uint8_t * buf, int cnt) {
 
@@ -147,12 +145,10 @@ static void rfnm_si5510_boot(struct i2c_client *client) {
 
 
 uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
-	uint8_t i2c_read_buf[100];
+	uint8_t i2c_read_buf[100] = {0};
 
 	uint8_t reference_status_request[] = { 0xF0, 0x0F, 0x16 };
 	rfnm_si5510_i2c_write(client, reference_status_request, 3);
-
-	uint8_t reference_status_response[5];
 
 	do {
 		if (i2c_read_buf[0] == 0x90) {
@@ -164,8 +160,7 @@ uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
 	} while(i2c_read_buf[0] != 0x80);
 
 	// return true if reference PLL is locked, otherwise return false.
-	// why & and not &&???
-	return (i2c_read_buf[0] == 0x80 & i2c_read_buf[1] == 0x00 & i2c_read_buf[2] == 0 & i2c_read_buf[3] == 0 & i2c_read_buf[4] == 0);
+	return (i2c_read_buf[0] == 0x80 && i2c_read_buf[1] == 0x00 && i2c_read_buf[2] == 0 && i2c_read_buf[3] == 0 && i2c_read_buf[4] == 0);
 }
 
 int can_use_si5510_config(struct rfnm_bootconfig *cfg, int daughterboard_1, int daughterboard_2) {
@@ -248,7 +243,24 @@ static ssize_t rfnm_ext_ref_out_store(struct device *dev, struct device_attribut
 static DEVICE_ATTR_WO(rfnm_ext_ref_out);
 
 
-void rfnm_si5510_set_dcs_freq_work(struct i2c_client *client, uint64_t freq) {
+static int rfnm_si5510_wait_clock_stable(struct i2c_client *client) {
+	int retries;
+
+	if(!client) {
+		return -ENODEV;
+	}
+
+	for(retries = 0; retries < 1000; retries++) {
+		if(rfnm_si5510_reference_status(client)) {
+			return 0;
+		}
+		usleep_range(1000, 2000);
+	}
+
+	return -ETIMEDOUT;
+}
+
+static int rfnm_si5510_set_dcs_freq_work(struct i2c_client *client, uint64_t freq) {
 
 	uint8_t *fotf_nb = (uint8_t *) kzalloc(0xff, GFP_KERNEL);
 	uint8_t fotf_nb_size = 0;
@@ -256,17 +268,28 @@ void rfnm_si5510_set_dcs_freq_work(struct i2c_client *client, uint64_t freq) {
 	uint32_t idx = 0;
 	uint32_t idx_replay_to = 0;
 	uint32_t b;
+	int base_idx;
+
+	if(!client) {
+		kfree(fotf_nb);
+		return -ENODEV;
+	}
+
+	if(!fotf_nb) {
+		return -ENOMEM;
+	}
 
 	while (idx < RFNM_SI5510_NUM_INDEX_ELEMS) {
 		if (rfnm_si5510_compression_index[idx].freq == (freq / 1000)) {
 			idx_replay_to = idx;
-			while (idx >= 0) {
-				if (rfnm_si5510_compression_index[idx].type == 0) {
-					fotf_nb_size = rfnm_si5510_compression_index[idx].size;
-					memcpy(fotf_nb, &rfnm_si5510_compressed_bin[rfnm_si5510_compression_index[idx].start], fotf_nb_size);
+			/* Start from the nearest full configuration, then replay overlays up to the requested frequency. */
+			for(base_idx = idx; base_idx >= 0; base_idx--) {
+				if (rfnm_si5510_compression_index[base_idx].type == 0) {
+					fotf_nb_size = rfnm_si5510_compression_index[base_idx].size;
+					memcpy(fotf_nb, &rfnm_si5510_compressed_bin[rfnm_si5510_compression_index[base_idx].start], fotf_nb_size);
+					idx = base_idx;
 					break;
 				}
-				idx--;
 			}
 			while (idx <= idx_replay_to) {
 				if (rfnm_si5510_compression_index[idx].type == 1) {
@@ -285,42 +308,45 @@ void rfnm_si5510_set_dcs_freq_work(struct i2c_client *client, uint64_t freq) {
 		idx++;
 	}
 
-	printk("RFNM: Si5510: setting LA9310 to %d kHz, idx %d size %d\n", freq / 1000, idx, fotf_nb_size);
+	if(!fotf_nb_size) {
+		printk("RFNM: Si5510: unsupported LA9310 DCS frequency %llu Hz\n", (unsigned long long)freq);
+		kfree(fotf_nb);
+		return -EINVAL;
+	}
+
+	printk("RFNM: Si5510: setting LA9310 to %llu kHz, idx %d size %d\n", (unsigned long long)(freq / 1000), idx, fotf_nb_size);
 	/*for(b = 0; b < fotf_nb_size; b++) {
 		printk("%02x ", fotf_nb[b]);
 	}*/
 
 	rfnm_si5510_host_load(client, fotf_nb, fotf_nb_size);
-	
-	rfnm_dcs_freq_hz = freq;
 	kfree(fotf_nb);
+	return 0;
 }
 
-// as it turns out, chilling smaller steps is counter productive, as the switching is not glitchless. rip. 
-void rfnm_si5510_set_dcs_freq_chill(struct i2c_client *client, uint64_t target_freq) {
+int rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq) {
+	int ret;
 
-	uint64_t MAX_FREQ_CHANGE = 1e6; // keep it bigger than min_freq
-	uint64_t freq;
-	if((rfnm_dcs_freq_hz < target_freq) && (rfnm_dcs_freq_hz + MAX_FREQ_CHANGE < target_freq)) {
-		freq = rfnm_dcs_freq_hz + MAX_FREQ_CHANGE;
+	if(!client) {
+		return -ENODEV;
 	}
-	else if((rfnm_dcs_freq_hz > target_freq) && (rfnm_dcs_freq_hz - MAX_FREQ_CHANGE > target_freq)) {
-		freq = rfnm_dcs_freq_hz - MAX_FREQ_CHANGE;
-	} else {
-		freq = target_freq;
-	}
-	rfnm_si5510_set_dcs_freq_work(client, freq);
-	if(target_freq != freq) {
-		//printk("RFNM: easing freq change %ld\n", target_freq);
-		msleep(10);
-		rfnm_si5510_set_dcs_freq_chill(client, target_freq);
-	}
-}
 
-void rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq) {
+	if(rfnm_dcs_freq_hz == freq) {
+		return rfnm_si5510_wait_clock_stable(client);
+	}
 
-	rfnm_si5510_set_dcs_freq_work(client, freq);
-	//rfnm_si5510_set_dcs_freq_chill(client, freq);
+	ret = rfnm_si5510_set_dcs_freq_work(client, freq);
+	if(ret) {
+		return ret;
+	}
+	ret = rfnm_si5510_wait_clock_stable(client);
+	if(ret) {
+		printk("RFNM: Si5510: timed out waiting for stable clock at %llu Hz\n", (unsigned long long)freq);
+		return ret;
+	}
+
+	rfnm_dcs_freq_hz = freq;
+	return 0;
 }
 
 EXPORT_SYMBOL(rfnm_si5510_set_dcs_freq);
@@ -340,7 +366,7 @@ void rfnm_si5510_set_dco(struct i2c_client *client, int32_t val) {
 		printk("RFNM: Si5510 DCO set to %d ppb\n", val);
 	}
 	else {
-		printk("RFNM: failed to set Si5510 DCO\n", val);
+		printk("RFNM: failed to set Si5510 DCO\n");
 	}
 }
 
@@ -371,9 +397,8 @@ static ssize_t rfnm_set_dcs_freq_store(struct device *dev, struct device_attribu
 		return -EINVAL;
 	}
 
-	rfnm_si5510_set_dcs_freq(client, reqfreq * 1000);
+	return rfnm_si5510_set_dcs_freq(client, reqfreq * 1000) ? -EINVAL : count;
 
-	return count;
 }
 
 static DEVICE_ATTR_WO(rfnm_set_dcs_freq);
@@ -489,10 +514,15 @@ err:
 	return error;
 }
 
-static int rfnm_si5510_reset_la9310(void) {
+static int rfnm_si5510_reset_la9310(uint64_t dcs_freq) {
 	int error;
 
 	mutex_lock(&rfnm_la9310_reset_lock);
+
+	if(!dcs_freq) {
+		error = -EINVAL;
+		goto out;
+	}
 
 	if(IS_ERR_OR_NULL(la9310_trst_gpio) || IS_ERR_OR_NULL(la9310_hrst_gpio) || IS_ERR_OR_NULL(la9310_bootstrap_en_gpio) ||
 			IS_ERR_OR_NULL(power_en_09_gpio) || IS_ERR_OR_NULL(la9310_power_en_gpio)) {
@@ -508,15 +538,20 @@ static int rfnm_si5510_reset_la9310(void) {
 	gpiod_set_value_cansleep(power_en_09_gpio, 1);
 	gpiod_set_value_cansleep(la9310_power_en_gpio, 1);
 
-	msleep(10);
+	usleep_range(1000, 2000);
+
+	error = rfnm_si5510_set_dcs_freq(rfnm_si5510_client, dcs_freq);
+	if(error) {
+		printk("RFNM: Failed to set LA9310 DCS clock during reset: %d\n", error);
+		goto out;
+	}
 
 	gpiod_set_value_cansleep(la9310_trst_gpio, 1);
 	gpiod_set_value_cansleep(la9310_hrst_gpio, 1);
 
-	msleep(10);
+	usleep_range(1000, 2000);
 
 	gpiod_set_value_cansleep(la9310_bootstrap_en_gpio, 1);
-
 	printk("RFNM: Performed LA9310 reset\n");
 
 	error = 0;
@@ -526,8 +561,8 @@ out:
 	return error;
 }
 
-int rfnm_board_reset_la9310(void) {
-	return rfnm_si5510_reset_la9310();
+int rfnm_board_reset_la9310(uint64_t dcs_freq) {
+	return rfnm_si5510_reset_la9310(dcs_freq);
 }
 EXPORT_SYMBOL_GPL(rfnm_board_reset_la9310);
 
@@ -539,7 +574,7 @@ static ssize_t rfnm_reset_la9310_store(struct device *dev, struct device_attribu
 		return -EINVAL;
 	}
 
-	error = rfnm_board_reset_la9310();
+	error = rfnm_board_reset_la9310(rfnm_dcs_freq_hz);
 	if(error) {
 		return error;
 	}
@@ -575,12 +610,12 @@ void rfnm_si5510_load_from_map(struct i2c_client *client, int offset, int map, i
 
 static int rfnm_si5510_probe(struct i2c_client *client) {
 
-	int i;
 	struct rfnm_bootconfig *cfg;
-	struct rfnm_eeprom_data *eeprom_data;
+
 	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
 
 	rfnm_dcs_freq_hz = 122880000;
+	rfnm_si5510_client = client;
 
 	if(device_property_read_bool(&client->dev, "rfnm,skip-5510-init-quirk")) {
 		cfg->pcie_clock_ready = 1;
@@ -727,7 +762,7 @@ repeat_search:
 		return error;
 	}
 
-	error = rfnm_si5510_reset_la9310();
+	error = rfnm_si5510_reset_la9310(rfnm_dcs_freq_hz);
 	if(error) {
 		return error;
 	}

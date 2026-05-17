@@ -55,8 +55,9 @@
 
 #define RFNM_NUM_DCS_FREQ 25
 //extern uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3];
+struct i2c_client;
 extern uint32_t rfnm_si5510_get_dcs_freq(struct i2c_client *client);
-extern void rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq);
+extern int rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq);
 
 
 
@@ -110,15 +111,13 @@ struct __attribute__((__packed__)) rfnm_bootconfig {
 
 
 
-RFNM_PACKED_STRUCT(
-	struct fe_s {
-		uint32_t latch_val[6];
-		uint32_t latch_val_last_written[6];
-		uint32_t num_latches[7];
-		uint32_t align[1];
-		uint32_t load_order[8];
-	};
-);
+struct __attribute__((__packed__)) fe_s {
+	uint32_t latch_val[6];
+	uint32_t latch_val_last_written[6];
+	uint32_t num_latches[7];
+	uint32_t align[1];
+	uint32_t load_order[8];
+};
 
 struct rfnm_dgb {
 	struct rfnm_api_rx_ch *rx_ch[4];
@@ -180,13 +179,14 @@ void rfnm_set_samp_rate_user(uint64_t freq);
 int rfnm_la9310_stream(uint64_t user_dcs_hz, uint8_t tx, uint8_t *rx);
 void rfnm_populate_dev_status(struct rfnm_dev_status * r_stat);
 void rfnm_restart_sm(int hard);
+int rfnm_wait_restart_sm_idle(unsigned int timeout_ms);
 int rfnm_dev_process_udp_ctrl(uint32_t cmd, uint32_t *size, uint8_t *buf);
 
-int rfnm_board_reset_la9310(void);
+int rfnm_board_reset_la9310(uint64_t dcs_freq);
 int rfnm_pcie_rc_set_disabled(bool disabled);
-int rfnm_la9310_hard_reprobe(void);
-int rfnm_hard_reset_la9310(void);
-int rfnm_schedule_hard_reset_la9310(void);
+int rfnm_la9310_hard_reprobe(uint64_t dcs_freq);
+int rfnm_hard_reset_la9310(uint64_t dcs_freq);
+int rfnm_schedule_hard_reset_la9310(uint64_t dcs_freq);
 int rfnm_get_hard_reset_la9310_status(void);
 
 
