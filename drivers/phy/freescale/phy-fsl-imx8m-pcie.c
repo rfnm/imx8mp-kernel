@@ -35,6 +35,8 @@
 #define  ANA_AUX_TX_LVL			GENMASK(3, 0)
 #define IMX8MM_PCIE_PHY_CMN_REG075	0x1D4
 #define  ANA_PLL_DONE			0x3
+#define IMX8MP_PCIE_PHY_PCS_STATUS	0x8188
+#define  IMX8MP_PCIE_PHY_PCS_PIPE_CLK_READY	BIT(1)
 #define PCIE_PHY_TRSV_REG5		0x414
 #define PCIE_PHY_TRSV_REG6		0x418
 
@@ -237,7 +239,26 @@ static int imx8_pcie_phy_power_on(struct phy *phy)
 	/* Polling to check the phy is ready or not. */
 	ret = readl_poll_timeout(imx8_phy->base + IMX8MM_PCIE_PHY_CMN_REG075,
 				 val, val == ANA_PLL_DONE, 10, 20000);
+	if (ret && imx8_phy->drvdata->variant == IMX8MP) {
+		ret = readl_poll_timeout(imx8_phy->base + IMX8MP_PCIE_PHY_PCS_STATUS,
+					 val, val & IMX8MP_PCIE_PHY_PCS_PIPE_CLK_READY, 10, 20000);
+	}
 	return ret;
+}
+
+static int imx8_pcie_phy_power_off(struct phy *phy)
+{
+	struct imx8_pcie_phy *imx8_phy = phy_get_drvdata(phy);
+
+	if (imx8_phy->drvdata->variant == IMX8MP) {
+		reset_control_assert(imx8_phy->perst);
+	}
+
+	reset_control_assert(imx8_phy->reset);
+	regmap_update_bits(imx8_phy->iomuxc_gpr, IOMUXC_GPR14, IMX8MM_GPR_PCIE_CMN_RST, 0);
+	regmap_update_bits(imx8_phy->iomuxc_gpr, IOMUXC_GPR14, IMX8MM_GPR_PCIE_POWER_OFF, IMX8MM_GPR_PCIE_POWER_OFF);
+
+	return 0;
 }
 
 static int imx8_pcie_phy_init(struct phy *phy)
@@ -260,6 +281,7 @@ static const struct phy_ops imx8_pcie_phy_ops = {
 	.init		= imx8_pcie_phy_init,
 	.exit		= imx8_pcie_phy_exit,
 	.power_on	= imx8_pcie_phy_power_on,
+	.power_off	= imx8_pcie_phy_power_off,
 	.owner		= THIS_MODULE,
 };
 

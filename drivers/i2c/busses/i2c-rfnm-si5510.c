@@ -412,6 +412,126 @@ struct gpio_desc *la9310_bootstrap_en_gpio;
 
 struct gpio_desc *power_en_09_gpio;
 struct gpio_desc *la9310_power_en_gpio;
+
+static void rfnm_si5510_put_la9310_gpios(void) {
+	if(!IS_ERR_OR_NULL(power_en_09_gpio)) {
+		gpiod_put(power_en_09_gpio);
+	}
+	if(!IS_ERR_OR_NULL(la9310_trst_gpio)) {
+		gpiod_put(la9310_trst_gpio);
+	}
+	if(!IS_ERR_OR_NULL(la9310_hrst_gpio)) {
+		gpiod_put(la9310_hrst_gpio);
+	}
+	if(!IS_ERR_OR_NULL(la9310_bootstrap_en_gpio)) {
+		gpiod_put(la9310_bootstrap_en_gpio);
+	}
+	if(!IS_ERR_OR_NULL(la9310_power_en_gpio)) {
+		gpiod_put(la9310_power_en_gpio);
+	}
+
+	power_en_09_gpio = NULL;
+	la9310_trst_gpio = NULL;
+	la9310_hrst_gpio = NULL;
+	la9310_bootstrap_en_gpio = NULL;
+	la9310_power_en_gpio = NULL;
+}
+
+static int rfnm_si5510_get_la9310_gpios(struct device *dev) {
+	int error;
+
+	la9310_trst_gpio = gpiod_get(dev, "la9310-trst", GPIOD_OUT_LOW);
+	if (IS_ERR(la9310_trst_gpio)) {
+		error = PTR_ERR(la9310_trst_gpio);
+		printk("RFNM: Failed to get la9310-trst gpio: %d\n", error);
+		goto err;
+	}
+
+	la9310_hrst_gpio = gpiod_get(dev, "la9310-hrst", GPIOD_OUT_LOW);
+	if (IS_ERR(la9310_hrst_gpio)) {
+		error = PTR_ERR(la9310_hrst_gpio);
+		printk("RFNM: Failed to get la9310-hrst gpio: %d\n", error);
+		goto err;
+	}
+
+	la9310_bootstrap_en_gpio = gpiod_get(dev, "la9310-bootstrap-en", GPIOD_OUT_HIGH);
+	if (IS_ERR(la9310_bootstrap_en_gpio)) {
+		error = PTR_ERR(la9310_bootstrap_en_gpio);
+		printk("RFNM: Failed to get la9310-bootstrap-en gpio: %d\n", error);
+		goto err;
+	}
+
+	power_en_09_gpio = gpiod_get(dev, "09v-power-en", GPIOD_OUT_LOW);
+	if (IS_ERR(power_en_09_gpio)) {
+		error = PTR_ERR(power_en_09_gpio);
+		printk("RFNM: Failed to get 09v-power-en gpio: %d\n", error);
+		goto err;
+	}
+
+	la9310_power_en_gpio = gpiod_get(dev, "la9310-power-en", GPIOD_OUT_LOW);
+	if (IS_ERR(la9310_power_en_gpio)) {
+		error = PTR_ERR(la9310_power_en_gpio);
+		printk("RFNM: Failed to get la9310-power-en gpio: %d\n", error);
+		goto err;
+	}
+
+	return 0;
+
+err:
+	rfnm_si5510_put_la9310_gpios();
+	return error;
+}
+
+static int rfnm_si5510_reset_la9310(struct device *dev) {
+	int error;
+
+	error = rfnm_si5510_get_la9310_gpios(dev);
+	if(error) {
+		return error;
+	}
+
+	gpiod_set_value_cansleep(la9310_hrst_gpio, 0);
+	gpiod_set_value_cansleep(la9310_trst_gpio, 0);
+
+	gpiod_set_value_cansleep(la9310_bootstrap_en_gpio, 0);
+
+	gpiod_set_value_cansleep(power_en_09_gpio, 1);
+	gpiod_set_value_cansleep(la9310_power_en_gpio, 1);
+
+	msleep(10);
+
+	gpiod_set_value_cansleep(la9310_trst_gpio, 1);
+	gpiod_set_value_cansleep(la9310_hrst_gpio, 1);
+
+	msleep(10);
+
+	gpiod_set_value_cansleep(la9310_bootstrap_en_gpio, 1);
+
+	printk("RFNM: Performed LA9310 reset\n");
+
+	rfnm_si5510_put_la9310_gpios();
+
+	return 0;
+}
+
+static ssize_t rfnm_reset_la9310_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
+	int error;
+
+	if(buf[0] != '1' && buf[0] != 'r' && buf[0] != 'b') {
+		printk("RFNM: Valid rfnm_reset_la9310 inputs are '1', 'reset', or 'boot'\n");
+		return -EINVAL;
+	}
+
+	error = rfnm_si5510_reset_la9310(dev);
+	if(error) {
+		return error;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(rfnm_reset_la9310);
+
 /*
 uint32_t rfnm_si5510_plan_map[RFNM_NUM_DCS_FREQ][3] = {
 	{300, 38, 38912000},{285, 40, 40960000},{256, 45, 45600000},
@@ -480,46 +600,6 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if (IS_ERR(si5510_rst_gpio)) {
 		error = PTR_ERR(si5510_rst_gpio);
-		printk("RFNM: Failed to get enable gpio: %d\n", error);
-		return error;
-	}
-
-	la9310_trst_gpio = devm_gpiod_get(&client->dev, "la9310-trst", GPIOD_OUT_LOW);
-
-	if (IS_ERR(la9310_trst_gpio)) {
-			error = PTR_ERR(la9310_trst_gpio);
-			printk("RFNM: Failed to get enable gpio: %d\n", error);
-			return error;
-		}
-
-	la9310_hrst_gpio = devm_gpiod_get(&client->dev, "la9310-hrst", GPIOD_OUT_LOW);
-
-	if (IS_ERR(la9310_hrst_gpio)) {
-		error = PTR_ERR(la9310_hrst_gpio);
-		printk("RFNM: Failed to get enable gpio: %d\n", error);
-		return error;
-	}
-
-	la9310_bootstrap_en_gpio = devm_gpiod_get(&client->dev, "la9310-bootstrap-en", GPIOD_OUT_HIGH);
-
-	if (IS_ERR(la9310_bootstrap_en_gpio)) {
-		error = PTR_ERR(la9310_bootstrap_en_gpio);
-		printk("RFNM: Failed to get enable gpio: %d\n", error);
-		return error;
-	}
-
-	power_en_09_gpio = devm_gpiod_get(&client->dev, "09v-power-en", GPIOD_OUT_LOW);
-
-	if (IS_ERR(power_en_09_gpio)) {
-		error = PTR_ERR(power_en_09_gpio);
-		printk("RFNM: Failed to get enable gpio: %d\n", error);
-		return error;
-	}
-
-	la9310_power_en_gpio = devm_gpiod_get(&client->dev, "la9310-power-en", GPIOD_OUT_LOW);
-
-	if (IS_ERR(la9310_power_en_gpio)) {
-		error = PTR_ERR(la9310_power_en_gpio);
 		printk("RFNM: Failed to get enable gpio: %d\n", error);
 		return error;
 	}
@@ -625,34 +705,10 @@ repeat_search:
 
 	cfg->pcie_clock_ready = 1;
 
-	gpiod_set_value(la9310_hrst_gpio, 0);
-	gpiod_set_value(la9310_trst_gpio, 0);
-
-	gpiod_set_value(la9310_bootstrap_en_gpio, 0);
-
-	gpiod_set_value(power_en_09_gpio, 1);
-	gpiod_set_value(la9310_power_en_gpio, 1);
-
-	msleep(10);
-
-	// merge this into single register write?
-	gpiod_set_value(la9310_trst_gpio, 1);
-	gpiod_set_value(la9310_hrst_gpio, 1);
-
-	msleep(10);
-
-	gpiod_set_value(la9310_bootstrap_en_gpio, 1);
-
-	printk("RFNM: Performed LA9310 reset\n");
-
-	// release LA9310 GPIOs for people to play with it in userspace (JTAG, etc).
-
-	
-	gpiod_put(power_en_09_gpio);
-	gpiod_put(la9310_trst_gpio);
-	gpiod_put(la9310_hrst_gpio);
-	gpiod_put(la9310_bootstrap_en_gpio);
-	gpiod_put(la9310_power_en_gpio);
+	error = rfnm_si5510_reset_la9310(&client->dev);
+	if(error) {
+		return error;
+	}
 
 	// cannot load wsled because it's not init'd yet... not sure why the order changed
 	//rfnm_wsled_set(0, 0, 0, 0, 0xff);
@@ -673,6 +729,11 @@ repeat_search:
 	err = device_create_file(&client->dev, &dev_attr_rfnm_set_dco_ppb);
 	if (err < 0) {
 		printk("RFNM: failed to create device file for rfnm_set_dco_ppb");
+	}
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_reset_la9310);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_reset_la9310");
 	}
 	//device_remove_file(&client->dev, &(dev_attr_rfnm_show_board_info));
 

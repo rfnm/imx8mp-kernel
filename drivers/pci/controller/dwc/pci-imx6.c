@@ -85,6 +85,23 @@
 #define IMX8MQ_GPR12_PCIE2_CTRL_DEVICE_TYPE	GENMASK(11, 8)
 #define IMX8MQ_PCIE2_BASE_ADDR			0x33c00000
 #define IMX8_HSIO_PCIEB_BASE_ADDR		0x5f010000
+#define IMX8MP_HSIO_BLK_CTRL_BASE		0x32f10000
+#define IMX8MP_HSIO_GPR0			0x0
+#define IMX8MP_HSIO_GPR0_CLK_MOD_EN		BIT(0)
+#define IMX8MP_HSIO_GPR0_PHY_APB_RST		BIT(4)
+#define IMX8MP_HSIO_GPR0_PHY_INIT_RST		BIT(5)
+#define IMX8MP_HSIO_GPR1			0x4
+#define IMX8MP_HSIO_GPR1_PLL_LOCK		BIT(13)
+#define IMX8MP_HSIO_GPR2			0x8
+#define IMX8MP_HSIO_GPR2_P_PLL_MASK		GENMASK(5, 0)
+#define IMX8MP_HSIO_GPR2_M_PLL_MASK		GENMASK(15, 6)
+#define IMX8MP_HSIO_GPR2_S_PLL_MASK		GENMASK(18, 16)
+#define IMX8MP_HSIO_GPR2_P_PLL			(0xc << 0)
+#define IMX8MP_HSIO_GPR2_M_PLL			(0x320 << 6)
+#define IMX8MP_HSIO_GPR2_S_PLL			(0x4 << 16)
+#define IMX8MP_HSIO_GPR3			0xc
+#define IMX8MP_HSIO_GPR3_PLL_CKE		BIT(17)
+#define IMX8MP_HSIO_GPR3_PLL_RST		BIT(31)
 
 #define to_imx6_pcie(x)	dev_get_drvdata((x)->dev)
 
@@ -1412,6 +1429,64 @@ static int imx6_pcie_config_sid(struct imx6_pcie *imx6_pcie)
 	return 0;
 }
 
+static int imx8mp_pcie_enable_hsio_pll(struct imx6_pcie *imx6_pcie)
+{
+	struct device *dev = imx6_pcie->pci->dev;
+	void __iomem *hsio;
+	u32 gpr0, gpr1, gpr2, gpr3;
+	int i;
+
+	if (imx6_pcie->drvdata->variant != IMX8MP && imx6_pcie->drvdata->variant != IMX8MP_EP) {
+		return 0;
+	}
+
+	hsio = ioremap(IMX8MP_HSIO_BLK_CTRL_BASE, 0x1000);
+	if (!hsio) {
+		return -ENOMEM;
+	}
+
+	gpr2 = readl(hsio + IMX8MP_HSIO_GPR2);
+	gpr2 &= ~IMX8MP_HSIO_GPR2_P_PLL_MASK;
+	gpr2 |= IMX8MP_HSIO_GPR2_P_PLL;
+	gpr2 &= ~IMX8MP_HSIO_GPR2_M_PLL_MASK;
+	gpr2 |= IMX8MP_HSIO_GPR2_M_PLL;
+	gpr2 &= ~IMX8MP_HSIO_GPR2_S_PLL_MASK;
+	gpr2 |= IMX8MP_HSIO_GPR2_S_PLL;
+	writel(gpr2, hsio + IMX8MP_HSIO_GPR2);
+	udelay(1);
+
+	gpr3 = readl(hsio + IMX8MP_HSIO_GPR3);
+	gpr3 |= IMX8MP_HSIO_GPR3_PLL_RST;
+	writel(gpr3, hsio + IMX8MP_HSIO_GPR3);
+	udelay(10);
+
+	gpr3 = readl(hsio + IMX8MP_HSIO_GPR3);
+	gpr3 |= IMX8MP_HSIO_GPR3_PLL_CKE;
+	writel(gpr3, hsio + IMX8MP_HSIO_GPR3);
+
+	for (i = 0; i < 100; i++) {
+		gpr1 = readl(hsio + IMX8MP_HSIO_GPR1);
+		if (gpr1 & IMX8MP_HSIO_GPR1_PLL_LOCK) {
+			break;
+		}
+		udelay(10);
+	}
+
+	gpr0 = readl(hsio + IMX8MP_HSIO_GPR0);
+	gpr0 |= IMX8MP_HSIO_GPR0_CLK_MOD_EN | IMX8MP_HSIO_GPR0_PHY_APB_RST | IMX8MP_HSIO_GPR0_PHY_INIT_RST;
+	writel(gpr0, hsio + IMX8MP_HSIO_GPR0);
+
+	gpr1 = readl(hsio + IMX8MP_HSIO_GPR1);
+	gpr2 = readl(hsio + IMX8MP_HSIO_GPR2);
+	gpr3 = readl(hsio + IMX8MP_HSIO_GPR3);
+	dev_info(dev, "RFNM: IMX8MP HSIO PCIe init: GPR0=0x%08x GPR1=0x%08x GPR2=0x%08x GPR3=0x%08x%s\n",
+		 gpr0, gpr1, gpr2, gpr3, (gpr1 & IMX8MP_HSIO_GPR1_PLL_LOCK) ? "" : " PLL_UNLOCKED");
+
+	iounmap(hsio);
+
+	return 0;
+}
+
 static int imx6_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -1451,6 +1526,12 @@ static int imx6_pcie_host_init(struct dw_pcie_rp *pp)
 			dev_err(dev, "waiting for PHY ready timeout!\n");
 			goto err_phy_off;
 		}
+	}
+
+	ret = imx8mp_pcie_enable_hsio_pll(imx6_pcie);
+	if (ret) {
+		dev_err(dev, "unable to enable IMX8MP PCIe HSIO PLL: %d\n", ret);
+		goto err_phy_off;
 	}
 
 	imx6_pcie_configure_type(imx6_pcie);
@@ -1764,6 +1845,10 @@ static int imx6_pcie_suspend_noirq(struct device *dev)
 		imx6_pcie_msi_save_restore(imx6_pcie, true);
 		imx6_pcie_pm_turnoff(imx6_pcie);
 		imx6_pcie_stop_link(imx6_pcie->pci);
+		if (gpio_is_valid(imx6_pcie->reset_gpio)) {
+			gpio_set_value_cansleep(imx6_pcie->reset_gpio, imx6_pcie->gpio_active_high);
+			dev_info(dev, "RFNM: asserted PCIe reset GPIO for suspend\n");
+		}
 		imx6_pcie_host_exit(pp);
 	}
 
@@ -1800,8 +1885,10 @@ static int imx6_pcie_resume_noirq(struct device *dev)
 		imx6_pcie_msi_save_restore(imx6_pcie, false);
 		dw_pcie_setup_rc(pp);
 
-		if (imx6_pcie->link_is_up)
-			imx6_pcie_start_link(imx6_pcie->pci);
+		ret = imx6_pcie_start_link(imx6_pcie->pci);
+		if (ret < 0) {
+			dev_info(dev, "pcie link is down after resume.\n");
+		}
 	}
 
 	imx6_pcie->suspended = false;
@@ -1861,10 +1948,14 @@ static ssize_t pcie_dis_store(struct device *dev,
 
 	if (val) {
 		dev_info(dev, "suspend pcie device\n");
-		imx6_pcie_suspend_noirq(dev);
+		ret = imx6_pcie_suspend_noirq(dev);
 	} else {
 		dev_info(dev, "resume pcie device\n");
-		imx6_pcie_resume_noirq(dev);
+		ret = imx6_pcie_resume_noirq(dev);
+	}
+	if (ret) {
+		dev_err(dev, "pcie_dis %u failed: %d\n", val, ret);
+		return ret;
 	}
 
 	return count;
