@@ -4006,20 +4006,28 @@ static void rtl8152_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 #endif
 }
 
+/* ndo_set_rx_mode runs under netif_addr_lock (a sleeping lock on PREEMPT_RT)
+ * and may sit inside an RCU read-side section (IPv6 mcast path), so the USB
+ * register I/O cannot run here and in_atomic() cannot detect either context.
+ * Always defer to the workqueue; process-context callers use
+ * _rtl8152_set_rx_mode() directly.
+ */
 static void rtl8152_set_rx_mode(struct net_device *netdev)
+{
+	struct r8152 *tp = netdev_priv(netdev);
+
+	if (netif_carrier_ok(netdev)) {
+		set_bit(RTL8152_SET_RX_MODE, &tp->flags);
+		schedule_delayed_work(&tp->schedule, 0);
+	}
+}
+
+static void _rtl8152_set_rx_mode(struct net_device *netdev)
 {
 	struct r8152 *tp = netdev_priv(netdev);
 	u32 mc_filter[2];	/* Multicast hash filter */
 	__le32 tmp[2];
 	u32 ocp_data;
-
-	if (in_atomic()) {
-		if (netif_carrier_ok(netdev)) {
-			set_bit(RTL8152_SET_RX_MODE, &tp->flags);
-			schedule_delayed_work(&tp->schedule, 0);
-		}
-		return;
-	}
 
 	clear_bit(RTL8152_SET_RX_MODE, &tp->flags);
 
@@ -12676,7 +12684,7 @@ static void set_carrier(struct r8152 *tp)
 			napi_disable(napi);
 			netif_carrier_on(netdev);
 			rtl_start_rx(tp);
-			rtl8152_set_rx_mode(netdev);
+			_rtl8152_set_rx_mode(netdev);
 			napi_enable(napi);
 			netif_wake_queue(netdev);
 			netif_info(tp, link, netdev, "carrier on\n");
@@ -12723,7 +12731,7 @@ static inline void __rtl_work_func(struct r8152 *tp)
 		set_carrier(tp);
 
 	if (test_bit(RTL8152_SET_RX_MODE, &tp->flags))
-		rtl8152_set_rx_mode(tp->netdev);
+		_rtl8152_set_rx_mode(tp->netdev);
 
 	/* don't schedule tasket before linking */
 	if (test_and_clear_bit(SCHEDULE_TASKLET, &tp->flags) &&
@@ -28985,7 +28993,7 @@ static int rtl8152_post_reset(struct usb_interface *intf)
 		mutex_lock(&tp->control);
 		tp->rtl_ops.enable(tp);
 		rtl_start_rx(tp);
-		rtl8152_set_rx_mode(netdev);
+		_rtl8152_set_rx_mode(netdev);
 		mutex_unlock(&tp->control);
 	}
 
@@ -30229,7 +30237,7 @@ static int rtl8152_set_coalesce(struct net_device *netdev,
 			tp->rtl_ops.enable(tp);
 			rtl_start_rx(tp);
 			napi_enable(&tp->napi);
-			rtl8152_set_rx_mode(netdev);
+			_rtl8152_set_rx_mode(netdev);
 			netif_wake_queue(netdev);
 		}
 	}
@@ -30904,7 +30912,7 @@ static int rtl8152_change_mtu(struct net_device *dev, int new_mtu)
 			rtl_start_rx(tp);
 			tasklet_enable(&tp->tx_tl);
 			napi_enable(&tp->napi);
-			rtl8152_set_rx_mode(dev);
+			_rtl8152_set_rx_mode(dev);
 			netif_wake_queue(dev);
 		}
 	}
@@ -32020,7 +32028,7 @@ static ssize_t fc_pause_on_store(struct device *dev,
 				rtl_start_rx(tp);
 				tasklet_enable(&tp->tx_tl);
 				napi_enable(&tp->napi);
-				rtl8152_set_rx_mode(netdev);
+				_rtl8152_set_rx_mode(netdev);
 				netif_wake_queue(netdev);
 			}
 		}
@@ -32107,7 +32115,7 @@ static ssize_t fc_pause_off_store(struct device *dev,
 				rtl_start_rx(tp);
 				tasklet_enable(&tp->tx_tl);
 				napi_enable(&tp->napi);
-				rtl8152_set_rx_mode(netdev);
+				_rtl8152_set_rx_mode(netdev);
 				netif_wake_queue(netdev);
 			}
 		}
