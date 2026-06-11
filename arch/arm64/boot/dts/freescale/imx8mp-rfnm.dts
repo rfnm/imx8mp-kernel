@@ -160,18 +160,7 @@
 		gpio = <&gpio2 19 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
-/*
-	usba_vbus: usba_vbus@0 {
-		compatible = "regulator-fixed";
-		regulator-name = "fixed-supply";
-//		regulator-min-microvolt = <5000000>;
-//		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 16 0>;
-		enable-active-high;
-		regulator-boot-on;
-//		gpio-open-drain;
-	};
-*/
+
 	rfnm_wsled {
 		compatible = "rfnm,wsled";
 		wsled1-gpios = <&gpio3 7 GPIO_ACTIVE_HIGH>;
@@ -375,6 +364,13 @@
 	
 	usb-role-switch;
 	role-switch-default-mode = "host";
+
+	/*
+	 * USB-A has no Type-C/ID/VBUS sense to drive the OTG role, so let
+	 * userspace select host/device via the role sysfs (see drd.c). VBUS is
+	 * the AP2161 EN on gpio3/6 (active-low), driven directly by userspace.
+	 */
+	rfnm,allow-userspace-role-control;
 };
 
 &pwm2 {
@@ -932,7 +928,8 @@
 
 		pinctrl_usba_vbus: usbagrp {
 			fsl,pins = <
-				MX8MP_IOMUXC_NAND_DATA00__GPIO3_IO06           0x00000106
+				MX8MP_IOMUXC_NAND_DATA00__GPIO3_IO06           0x00000106  // USB2_LOAD_SW: AP2161 EN (active-low: GPIO low = USB-A VBUS on)
+				MX8MP_IOMUXC_GPIO1_IO14__GPIO1_IO14            0x00000146  // USB2_FLAG: AP2161 open-drain fault, weak pull-up
 			>;
 		};
 

@@ -511,6 +511,13 @@ static int dwc3_setup_role_switch(struct dwc3 *dwc)
 	dwc3_role_switch.set = dwc3_usb_role_switch_set;
 	dwc3_role_switch.get = dwc3_usb_role_switch_get;
 	dwc3_role_switch.driver_data = dwc;
+	/*
+	 * RFNM: the USB-A port has no Type-C/ID/VBUS sense to drive the role,
+	 * so allow userspace to pick host/device via the role sysfs. Opt-in per
+	 * port via DT so the Type-C port keeps tcpm as its sole role driver.
+	 */
+	dwc3_role_switch.allow_userspace_control =
+		device_property_read_bool(dwc->dev, "rfnm,allow-userspace-role-control");
 	dwc->role_sw = usb_role_switch_register(dwc->dev, &dwc3_role_switch);
 	if (IS_ERR(dwc->role_sw))
 		return PTR_ERR(dwc->role_sw);
