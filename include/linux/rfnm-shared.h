@@ -178,7 +178,7 @@ void rfnm_populate_dev_set_res(struct rfnm_dev_get_set_result * r_res);
 int rfnm_set_samp_rate_user(uint64_t freq, uint32_t cc);
 int rfnm_la9310_stream(uint64_t user_dcs_hz, uint8_t tx, uint8_t *rx);
 void rfnm_populate_dev_status(struct rfnm_dev_status * r_stat);
-void rfnm_restart_sm(int hard);
+int rfnm_restart_sm(int hard);
 int rfnm_wait_restart_sm_idle(unsigned int timeout_ms);
 int rfnm_dev_process_udp_ctrl(uint32_t cmd, uint32_t *size, uint8_t *buf);
 
