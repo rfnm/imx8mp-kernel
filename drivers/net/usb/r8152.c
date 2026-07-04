@@ -793,8 +793,8 @@ enum rtl_register_content {
 #define is_speed_2500(_speed)	(((_speed) & (_2500bps | LINK_STATUS)) == (_2500bps | LINK_STATUS))
 #define is_flow_control(_speed)	(((_speed) & (_tx_flow | _rx_flow)) == (_tx_flow | _rx_flow))
 
-#define RTL8152_MAX_TX		4
-#define RTL8152_MAX_RX		10
+#define RTL8152_MAX_TX		16
+#define RTL8152_MAX_RX		64
 #define INTBUFSIZE		2
 
 #define RTL8152_RX_MAX_PENDING	4096
