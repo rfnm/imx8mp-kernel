@@ -1622,7 +1622,83 @@ static int dwc3_prepare_trbs(struct dwc3_ep *dep)
 
 static void dwc3_gadget_ep_cleanup_cancelled_requests(struct dwc3_ep *dep);
 
+static int __dwc3_gadget_kick_transfer_real(struct dwc3_ep *dep);
+static u32 dwc3_calc_trbs_left(struct dwc3_ep *dep);
+
+// Kick-independent reclaim for the lost-completion-event stall: armed by the kick-time
+// detector below; fires even after the function driver stops queueing (which it does
+// once its inflight gate fills - exactly when the endpoint is wedged and no more kicks
+// arrive). Validates the state under the lock; false alarms dissolve harmlessly.
+static void rfnm_ep_stall_work(struct work_struct *work)
+{
+	struct dwc3_ep *dep = container_of(to_delayed_work(work), struct dwc3_ep, rfnm_stall_work);
+	struct dwc3 *dwc = dep->dwc;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dwc->lock, flags);
+	// IN only: an armed IN endpoint always has device data flowing, so zero
+	// completion progress across a period is definitively a lost event. For OUT,
+	// "no progress" is just a quiet host - reclaiming there churns live traffic.
+	if ((dep->flags & DWC3_EP_ENABLED) && dep->endpoint.desc &&
+	    usb_endpoint_xfer_bulk(dep->endpoint.desc) &&
+	    usb_endpoint_dir_in(dep->endpoint.desc)) {
+		int has_started = !list_empty(&dep->started_list);
+		int has_pending = !list_empty(&dep->pending_list);
+		int frozen = (dep->rfnm_progress == dep->rfnm_progress_seen);
+
+		if (frozen && has_started && dep->rfnm_progress &&
+		    !(dep->flags & DWC3_EP_END_TRANSFER_PENDING)) {
+			printk_ratelimited("RFNMDBG dwc3 %s: stall-work reclaim (flags 0x%x, pend %d, progress %u)\n",
+				dep->name, dep->flags, has_pending, dep->rfnm_progress);
+			dwc3_stop_active_transfer(dep, false, false);
+			dwc3_gadget_ep_cleanup_cancelled_requests(dep);
+			__dwc3_gadget_kick_transfer_real(dep);
+		} else if (frozen && !has_started && has_pending) {
+			// work queued but nothing ever started and nothing completes: the
+			// start machinery is stuck - kick it directly
+			printk("RFNMDBG dwc3 %s: pending-not-started, kick (flags 0x%x)\n", dep->name, dep->flags);
+			__dwc3_gadget_kick_transfer_real(dep);
+		} else if (frozen && !has_started && !has_pending) {
+			// idle-frozen: log ONCE per freeze so the wedge state is visible even
+			// when this ep holds nothing (the stall then lives upstream of dwc3)
+			if (!dep->rfnm_stuck_since) {
+				dep->rfnm_stuck_since = 1;
+				printk("RFNMDBG dwc3 %s: idle at freeze (flags 0x%x, progress %u)\n",
+					dep->name, dep->flags, dep->rfnm_progress);
+			}
+		}
+		if (!frozen) {
+			dep->rfnm_stuck_since = 0;
+		}
+		dep->rfnm_progress_seen = dep->rfnm_progress;
+		// permanent watchdog while the endpoint lives: a chain that dies on a
+		// transiently-idle period leaves the wedge that follows with no trigger
+		schedule_delayed_work(&dep->rfnm_stall_work, msecs_to_jiffies(300));
+	}
+	spin_unlock_irqrestore(&dwc->lock, flags);
+}
+
 static int __dwc3_gadget_kick_transfer(struct dwc3_ep *dep)
+{
+	int kick_ret = __dwc3_gadget_kick_transfer_real(dep);
+
+	if (kick_ret && kick_ret != -EAGAIN) {
+		printk_ratelimited("RFNMDBG dwc3 %s: kick failed %d, flags 0x%x\n", dep->name, kick_ret, dep->flags);
+	}
+	// Lost-completion-event watchdog: IOC is only set on some TRBs; losing the one
+	// IOC-carrying event leaves siblings completed silently (HWO cleared, no event
+	// by design), the started list is never reclaimed, and the endpoint dies with
+	// zero errors anywhere. While transfers are active keep the stall work armed;
+	// it reclaims event-free (END_TRANSFER with interrupt=false completes via
+	// mdelay) if a whole period passes with no completion progress.
+	if (!list_empty(&dep->started_list) && dep->endpoint.desc &&
+	    usb_endpoint_xfer_bulk(dep->endpoint.desc) &&
+	    usb_endpoint_dir_in(dep->endpoint.desc)) {
+		schedule_delayed_work(&dep->rfnm_stall_work, msecs_to_jiffies(300));
+	}
+	return kick_ret;
+}
+static int __dwc3_gadget_kick_transfer_real(struct dwc3_ep *dep)
 {
 	struct dwc3_gadget_ep_cmd_params params;
 	struct dwc3_request		*req;
@@ -1746,6 +1822,7 @@ static int __dwc3_stop_active_transfer(struct dwc3_ep *dep, bool force, bool int
 		dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
 	} else if (!ret) {
 		dep->flags |= DWC3_EP_END_TRANSFER_PENDING;
+		printk_ratelimited("RFNMDBG dwc3 %s: ENDXFER issued (ioc), flags 0x%x\n", dep->name, dep->flags);
 	}
 
 	dep->flags &= ~DWC3_EP_DELAY_STOP;
@@ -1974,6 +2051,7 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 	    (dep->flags & DWC3_EP_DELAY_STOP) ||
 	    (dep->flags & DWC3_EP_STALL)) {
 		dep->flags |= DWC3_EP_DELAY_START;
+		printk_ratelimited("RFNMDBG dwc3 %s: queue deferred, flags 0x%x\n", dep->name, dep->flags);
 		return 0;
 	}
 
@@ -3306,6 +3384,7 @@ static int dwc3_gadget_init_endpoint(struct dwc3 *dwc, u8 epnum)
 	dep->endpoint.caps.dir_out = !direction;
 
 	INIT_LIST_HEAD(&dep->pending_list);
+	INIT_DELAYED_WORK(&dep->rfnm_stall_work, rfnm_ep_stall_work);
 	INIT_LIST_HEAD(&dep->started_list);
 	INIT_LIST_HEAD(&dep->cancelled_list);
 
@@ -3532,6 +3611,15 @@ out:
 static void dwc3_gadget_ep_cleanup_completed_requests(struct dwc3_ep *dep,
 		const struct dwc3_event_depevt *event, int status)
 {
+	dep->rfnm_progress++;
+	// re-arm the lost-event watchdog from the completion path: the stall always
+	// begins right after the last processed completion, so a watchdog armed here
+	// is guaranteed pending when the events go silent (kick-side arming dies with
+	// the kicks; a transiently-empty list breaks the work's self-rescheduling)
+	if (dep->endpoint.desc && usb_endpoint_xfer_bulk(dep->endpoint.desc) &&
+	    usb_endpoint_dir_in(dep->endpoint.desc)) {
+		schedule_delayed_work(&dep->rfnm_stall_work, msecs_to_jiffies(300));
+	}
 	struct dwc3_request	*req;
 
 	while (!list_empty(&dep->started_list)) {
@@ -3700,6 +3788,7 @@ static void dwc3_gadget_endpoint_command_complete(struct dwc3_ep *dep,
 	if (dep->stream_capable)
 		dep->flags |= DWC3_EP_IGNORE_NEXT_NOSTREAM;
 
+	printk_ratelimited("RFNMDBG dwc3 %s: ENDXFER complete, flags 0x%x\n", dep->name, dep->flags);
 	dep->flags &= ~DWC3_EP_END_TRANSFER_PENDING;
 	dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
 	dwc3_gadget_ep_cleanup_cancelled_requests(dep);
@@ -4506,6 +4595,10 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	count &= DWC3_GEVNTCOUNT_MASK;
 	if (!count)
 		return IRQ_NONE;
+
+	if (count > evt->length - 64) {
+		printk_ratelimited("RFNMDBG dwc3: event buffer near overflow (%u/%u)\n", count, evt->length);
+	}
 
 	evt->count = count;
 	evt->flags |= DWC3_EVENT_PENDING;

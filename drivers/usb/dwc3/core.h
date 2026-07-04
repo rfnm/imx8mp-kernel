@@ -785,6 +785,10 @@ struct dwc3_ep {
 	u8			number;
 	u8			type;
 	u8			resource_index;
+	unsigned long		rfnm_stuck_since;	/* lost-event stall detector */
+	struct delayed_work	rfnm_stall_work;	/* kick-independent reclaim trigger */
+	u32			rfnm_progress;		/* bumped on every completion pass */
+	u32			rfnm_progress_seen;	/* stall work's last snapshot */
 	u32			frame_number;
 	u32			interval;
 
