@@ -393,8 +393,16 @@
 
 &i2c1 {
 	clock-frequency = <400000>;
-	pinctrl-names = "default";
+	pinctrl-names = "default", "gpio";
 	pinctrl-0 = <&pinctrl_i2c1>;
+	pinctrl-1 = <&pinctrl_i2c1_gpio>;
+	/* GPIO bus recovery: this bus carries the CPU-rail PMIC alongside polled
+	 * slaves (TMP102, Si5510 behind the analog mux pair). A transfer aborted
+	 * mid-read (lpi2c timeout under IRQ storm) leaves the slave driving SDA and
+	 * the bus reads busy forever - only a board power cycle cleared it. With
+	 * these pins the lpi2c driver clock-pulses the slave free instead. */
+	scl-gpios = <&gpio5 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio5 15 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 	status = "okay";
 
 
@@ -1085,11 +1093,18 @@
                 MX8MP_IOMUXC_SD1_DATA3__UART2_DCE_RX       0x00000146
             >;
         };
-        pinctrl_i2c1: i2c1grp {    
+        pinctrl_i2c1: i2c1grp {
 
             fsl,pins = <
                 MX8MP_IOMUXC_I2C1_SCL__I2C1_SCL            0x400001c2
                 MX8MP_IOMUXC_I2C1_SDA__I2C1_SDA            0x400001c2
+            >;
+        };
+
+        pinctrl_i2c1_gpio: i2c1gpiogrp {
+            fsl,pins = <
+                MX8MP_IOMUXC_I2C1_SCL__GPIO5_IO14          0x400001c2
+                MX8MP_IOMUXC_I2C1_SDA__GPIO5_IO15          0x400001c2
             >;
         };
 
