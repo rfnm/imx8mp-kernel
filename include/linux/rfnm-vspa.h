@@ -49,6 +49,15 @@ RFNM_PACKED_STRUCT(
 	}
 ); 
 */
+// phytimer phase 1: the sub-descriptor adc_id word is packed by the VSPA as
+// [7:0] adc id, [15:8] flags (bit 8 = DISCONT: a self-heal re-gate happened right
+// before this sub), [23:16] epoch (RX stream generation - stamps are only comparable
+// within one epoch). Single writer (iqmod_rx.c), single reader (la9310_rfnm.c).
+// phytimer is the exact tick of the sub's first sample, computed device-side.
+#define RFNM_RX_SUBDESC_ID(x)		((x) & 0xFF)
+#define RFNM_RX_SUBDESC_DISCONT(x)	(((x) >> 8) & 0x1)
+#define RFNM_RX_SUBDESC_EPOCH(x)	(((x) >> 16) & 0xFF)
+
 RFNM_PACKED_STRUCT(
 	struct rfnm_bufdesc_rx_sub {
 		uint32_t adc_id;
@@ -56,7 +65,7 @@ RFNM_PACKED_STRUCT(
 		uint32_t cc;
 		uint32_t size;
 	}
-); 
+);
 #define RFNM_RX_BUF_OUT_SUB_CNT 12
 
 RFNM_PACKED_STRUCT(
@@ -95,11 +104,18 @@ RFNM_PACKED_STRUCT(
 		// tx_stream_seq increments on every fw-side arm/disarm.
 		uint32_t tx_state;
 		uint32_t tx_stream_seq;
-		uint32_t reserved[2];
-		//uint32_t pad_to_64[4];
-		//uint32_t pad_again[8]; //<-- only for M7
+		// phytimer phase 1: RX timing anchor (the stream ack), published on every RX
+		// stream start. rx_t0 = tick of the first sample of this epoch (all enabled RX
+		// channels gate open on the same tick). Ticks per output sample R =
+		// 2^rx_r_shift / 2, exact. rx_regate_cnt low half = overrun self-heal re-gates
+		// this epoch; high half = late-arm screams (never expected).
+		uint32_t rx_t0;
+		uint32_t rx_epoch;
+		uint32_t rx_r_shift;
+		uint32_t rx_regate_cnt;
+		uint32_t reserved[6];	// fw DMAs the struct whole: keep 64 B, fw copy must match
 	}
-); 
+);
 
 
 
