@@ -89,7 +89,13 @@ RFNM_PACKED_STRUCT(
 		uint32_t age;
 		uint32_t tx_buf_id;
 		uint32_t rx_buf_id;
-		uint32_t g_errors[LA_ERROR_MAX];
+		uint32_t g_stats_addr;
+		// ring protocol: authoritative TX stream state, heartbeat-published by the fw.
+		// tx_state bit0 = tx active, bits 4:1 = tx upsampling factor log2.
+		// tx_stream_seq increments on every fw-side arm/disarm.
+		uint32_t tx_state;
+		uint32_t tx_stream_seq;
+		uint32_t reserved[2];
 		//uint32_t pad_to_64[4];
 		//uint32_t pad_again[8]; //<-- only for M7
 	}
