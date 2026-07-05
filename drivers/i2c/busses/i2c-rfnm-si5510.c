@@ -260,6 +260,25 @@ static int rfnm_si5510_wait_clock_stable(struct i2c_client *client) {
 	return -ETIMEDOUT;
 }
 
+int rfnm_si5510_dcs_freq_supported(uint64_t freq) {
+	uint32_t idx;
+
+	// the FOTF index is keyed in integer kHz; a non-multiple-of-1000 target would silently program
+	// the floor kHz below (freq / 1000 truncates) - exact or refuse (issue #11)
+	if(freq % 1000) {
+		return 0;
+	}
+
+	for(idx = 0; idx < RFNM_SI5510_NUM_INDEX_ELEMS; idx++) {
+		if(rfnm_si5510_compression_index[idx].freq == (freq / 1000)) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(rfnm_si5510_dcs_freq_supported);
+
 static int rfnm_si5510_set_dcs_freq_work(struct i2c_client *client, uint64_t freq) {
 
 	uint8_t *fotf_nb = (uint8_t *) kzalloc(0xff, GFP_KERNEL);
@@ -332,7 +351,14 @@ int rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq) {
 	}
 
 	if(rfnm_dcs_freq_hz == freq) {
-		return rfnm_si5510_wait_clock_stable(client);
+		ret = rfnm_si5510_wait_clock_stable(client);
+		if(ret) {
+			// issue #11: the cache says this frequency is already programmed, but the clock is not
+			// stable - stop vouching for the hardware state so the next request reprograms instead
+			// of skip-trusting a broken clock
+			rfnm_dcs_freq_hz = 0;
+		}
+		return ret;
 	}
 
 	ret = rfnm_si5510_set_dcs_freq_work(client, freq);
@@ -342,6 +368,11 @@ int rfnm_si5510_set_dcs_freq(struct i2c_client *client, uint64_t freq) {
 	ret = rfnm_si5510_wait_clock_stable(client);
 	if(ret) {
 		printk("RFNM: Si5510: timed out waiting for stable clock at %llu Hz\n", (unsigned long long)freq);
+		// issue #11: the FOTF for the new frequency IS loaded - the hardware is no longer at the old
+		// frequency and not confirmed at the new one. Leaving the old value cached made later requests
+		// for that frequency skip reprogramming entirely (silent wrong-clock delivery, wedged until
+		// reboot). Mark the state unknown instead: 0 never matches, so the next request reprograms.
+		rfnm_dcs_freq_hz = 0;
 		return ret;
 	}
 
@@ -527,6 +558,14 @@ static int rfnm_si5510_reset_la9310(uint64_t dcs_freq) {
 	if(IS_ERR_OR_NULL(la9310_trst_gpio) || IS_ERR_OR_NULL(la9310_hrst_gpio) || IS_ERR_OR_NULL(la9310_bootstrap_en_gpio) ||
 			IS_ERR_OR_NULL(power_en_09_gpio) || IS_ERR_OR_NULL(la9310_power_en_gpio)) {
 		error = -ENODEV;
+		goto out;
+	}
+
+	if(!rfnm_si5510_dcs_freq_supported(dcs_freq)) {
+		// issue #11: refuse BEFORE the GPIO teardown below - discovering an unsupported frequency
+		// after the LA9310 is already held in reset leaves the board dead with its PCIe endpoint gone
+		printk("RFNM: refusing LA9310 reset: DCS %llu Hz is not synthesizable\n", (unsigned long long)dcs_freq);
+		error = -EINVAL;
 		goto out;
 	}
 
