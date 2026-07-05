@@ -114,7 +114,13 @@ RFNM_PACKED_STRUCT(
 		uint32_t rx_epoch;
 		uint32_t rx_r_shift;
 		uint32_t rx_regate_cnt;
-		uint32_t reserved[6];	// fw DMAs the struct whole: keep 64 B, fw copy must match
+		// phytimer phase 3: TX timing anchor (see the fw copy in LA9310_cal rfnm.h)
+	uint32_t tx_t0;
+	uint32_t tx_epoch;
+	uint32_t tx_r_shift;
+	uint32_t tx_underrun_cnt;
+	uint32_t tdd_realign_cnt;
+	uint32_t ddr_wr_drop_cnt;	// fw DMAs the struct whole: keep 64 B, fw copy must match
 	}
 );
 
