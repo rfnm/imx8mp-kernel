@@ -75,11 +75,35 @@ struct __attribute__((__packed__)) rfnm_eeprom_data {
 };
 
 
+// User settings framework: motherboard EEPROM bytes 128..255 (the whole user half of the 256 B
+// part). The KERNEL owns this layout (i2c-rfnm-bootconfig.c): settings are bit-packed into
+// payload[] at fixed positions declared in the driver's rfnm_user_settings[] table, and
+// userspace only ever sees one validated sysfs file per setting under
+// /sys/bus/i2c/devices/0-0050/rfnm_settings/ — it can never write raw bytes, so it cannot
+// corrupt the block or reach the factory half. Replaces the deprecated boot-selected Si5510
+// DCS clock block (magic A1 45 8E F8, removed 2026-07-04 — DCS is dynamic now). Shipped units
+// hold 0xFF here, which fails magic+crc and reads as per-setting defaults.
+#define RFNM_USER_CONFIG_VERSION (1)
 struct __attribute__((__packed__)) rfnm_eeprom_user_config {
-	uint8_t magic_header[4];
-	uint32_t dcs_clk_tmp;
-	uint32_t crc;
+	uint8_t magic_header[4];	// 'R','F','U','C'
+	uint8_t version;		// RFNM_USER_CONFIG_VERSION
+	uint8_t pad;
+	uint8_t payload[118];		// bit-addressed settings space, map = rfnm_user_settings[]
+	uint32_t crc;			// crc32(0x80000000, block, sizeof(block) - 4)
 };
+
+// Setting ids. APPEND ONLY: payload bit positions are permanent once a kernel ships.
+enum rfnm_user_setting_id {
+	RFNM_USER_SETTING_DDNS_ENABLED = 0,	// 1 bit
+	RFNM_USER_SETTING_DDNS_PUBLIC,		// 1 bit
+	RFNM_USER_SETTING_LED_BRIGHTNESS,	// 3 bits, 0 = off .. 7 = max
+	RFNM_USER_SETTING_DDNS_NICKNAME,	// string, 16 chars + NUL
+	RFNM_USER_SETTING_COUNT
+};
+
+// for in-kernel consumers (LED driver, ...); -EAGAIN before the bootconfig probe has run
+extern int rfnm_user_setting_get(enum rfnm_user_setting_id id, uint32_t *val);
+extern int rfnm_user_setting_get_str(enum rfnm_user_setting_id id, char *buf, size_t buflen);
 
 // 0xff initial status is only guaranteed by uboot mod in the first 4kB
 struct __attribute__((__packed__)) rfnm_bootconfig {
