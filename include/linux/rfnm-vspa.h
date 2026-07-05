@@ -107,8 +107,9 @@ RFNM_PACKED_STRUCT(
 		// phytimer phase 1: RX timing anchor (the stream ack), published on every RX
 		// stream start. rx_t0 = tick of the first sample of this epoch (all enabled RX
 		// channels gate open on the same tick). Ticks per output sample R =
-		// 2^rx_r_shift / 2, exact. rx_regate_cnt low half = overrun self-heal re-gates
-		// this epoch; high half = late-arm screams (never expected).
+		// 2^rx_r_shift / 2, exact. rx_regate_cnt = lanes the fw parked after an AXIQ
+		// overrun this epoch (zeroed at stream start; nonzero asks the kernel to
+		// re-gate with a fresh T0 - the fw itself has no phy timer access).
 		uint32_t rx_t0;
 		uint32_t rx_epoch;
 		uint32_t rx_r_shift;
