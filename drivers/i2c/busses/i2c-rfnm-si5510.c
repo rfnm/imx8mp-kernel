@@ -765,6 +765,9 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 	rfnm_si5510_restart(client);
 
 	rfnm_si5510_host_load(client, prod_fw_boot_bin, prod_fw_boot_bin_len);
+	// fw >= 1.4 requires the ROM patch alongside the firmware (Skyworks export README;
+	// load order between the boot files does not matter, only that all load before BOOT)
+	rfnm_si5510_host_load(client, patch_rom_boot_bin, patch_rom_boot_bin_len);
 	rfnm_si5510_host_load(client, Base_Plan_boot_bin, Base_Plan_boot_bin_len);
 
 	rfnm_si5510_boot(client);
