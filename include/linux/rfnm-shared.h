@@ -127,7 +127,7 @@ struct __attribute__((__packed__)) rfnm_bootconfig {
 
 
 
-#include </home/davide/imx-rfnm-bsp/build/tmp/work-shared/imx8mp-rfnm/kernel-source/include/linux/rfnm-api.h>
+#include <linux/rfnm-api.h>
 
 
 
