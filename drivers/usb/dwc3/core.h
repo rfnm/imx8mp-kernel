@@ -789,6 +789,7 @@ struct dwc3_ep {
 	struct delayed_work	rfnm_stall_work;	/* kick-independent reclaim trigger */
 	u32			rfnm_progress;		/* bumped on every completion pass */
 	u32			rfnm_progress_seen;	/* stall work's last snapshot */
+	u32			rfnm_reclaimed_at;	/* progress at the last reclaim: one reclaim per freeze */
 	u32			frame_number;
 	u32			interval;
 

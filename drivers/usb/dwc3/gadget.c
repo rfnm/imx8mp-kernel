@@ -908,6 +908,15 @@ static int __dwc3_gadget_ep_enable(struct dwc3_ep *dep, unsigned int action)
 		dep->trb_dequeue = 0;
 		dep->trb_enqueue = 0;
 
+		// fresh enable, fresh watchdog state: counters inherited from a previous
+		// enable read as "frozen at old progress" and can trigger a bogus reclaim
+		// on the first stall-work period of the new session (or eat the one
+		// idle-freeze log the next wedge would have produced)
+		dep->rfnm_progress = 0;
+		dep->rfnm_progress_seen = 0;
+		dep->rfnm_stuck_since = 0;
+		dep->rfnm_reclaimed_at = 0;
+
 		if (usb_endpoint_xfer_control(desc))
 			goto out;
 
@@ -1044,6 +1053,13 @@ static int __dwc3_gadget_ep_disable(struct dwc3_ep *dep)
 	dwc3_writel(dwc->regs, DWC3_DALEPENA, reg);
 
 	dwc3_remove_requests(dwc, dep, -ESHUTDOWN);
+
+	// the endpoint is going away: a stall-work period must not fire into (or
+	// re-arm across) the disabled state. Non-sync cancel: this runs under
+	// dwc->lock, and a work instance already executing takes the same lock,
+	// sees DWC3_EP_ENABLED cleared and dissolves without re-arming.
+	cancel_delayed_work(&dep->rfnm_stall_work);
+	dep->rfnm_stuck_since = 0;
 
 	dep->stream_capable = false;
 	dep->type = 0;
@@ -1645,19 +1661,47 @@ static void rfnm_ep_stall_work(struct work_struct *work)
 		int has_started = !list_empty(&dep->started_list);
 		int has_pending = !list_empty(&dep->pending_list);
 		int frozen = (dep->rfnm_progress == dep->rfnm_progress_seen);
+		// an END_TRANSFER sequence in flight (or deferred by DELAY_STOP) is NOT a
+		// lost event - it has its own completion path, and stopping/kicking across
+		// it replays started TRBs (session-boundary double delivery). Stay armed
+		// and act only once the sequence resolves; a sequence that never resolves
+		// shows up as the once-per-freeze log below, not as a reclaim storm.
+		int seq_pending = (dep->flags & (DWC3_EP_END_TRANSFER_PENDING | DWC3_EP_DELAY_STOP)) != 0;
 
-		if (frozen && has_started && dep->rfnm_progress &&
-		    !(dep->flags & DWC3_EP_END_TRANSFER_PENDING)) {
+		if (frozen && has_started && dep->rfnm_progress && !seq_pending &&
+		    dep->rfnm_reclaimed_at == dep->rfnm_progress) {
+			// ONE reclaim per freeze: the previous reclaim's re-kick produced zero
+			// progress, so this is not a lost completion event (a re-kicked chain
+			// with a live reader completes within a period) - it is an absent
+			// reader (client exited / paused with requests armed). Reclaiming
+			// again would churn ENDXFER+START against a dead pipe every period,
+			// forever (the between-session reclaim storm). Stand down until
+			// progress moves or the endpoint is re-enabled; log once per freeze.
+			if (!dep->rfnm_stuck_since) {
+				dep->rfnm_stuck_since = 1;
+				printk("RFNMDBG dwc3 %s: reclaim stood down, no reader (flags 0x%x, progress %u)\n",
+					dep->name, dep->flags, dep->rfnm_progress);
+			}
+		} else if (frozen && has_started && dep->rfnm_progress && !seq_pending) {
 			printk_ratelimited("RFNMDBG dwc3 %s: stall-work reclaim (flags 0x%x, pend %d, progress %u)\n",
 				dep->name, dep->flags, has_pending, dep->rfnm_progress);
+			dep->rfnm_reclaimed_at = dep->rfnm_progress;
 			dwc3_stop_active_transfer(dep, false, false);
 			dwc3_gadget_ep_cleanup_cancelled_requests(dep);
 			__dwc3_gadget_kick_transfer_real(dep);
-		} else if (frozen && !has_started && has_pending) {
+		} else if (frozen && !has_started && has_pending && !seq_pending) {
 			// work queued but nothing ever started and nothing completes: the
 			// start machinery is stuck - kick it directly
 			printk("RFNMDBG dwc3 %s: pending-not-started, kick (flags 0x%x)\n", dep->name, dep->flags);
 			__dwc3_gadget_kick_transfer_real(dep);
+		} else if (frozen && seq_pending) {
+			// visible once per freeze: if END_TRANSFER_PENDING/DELAY_STOP itself
+			// wedges, this is the only trace of it
+			if (!dep->rfnm_stuck_since) {
+				dep->rfnm_stuck_since = 1;
+				printk("RFNMDBG dwc3 %s: frozen behind ENDXFER sequence (flags 0x%x, progress %u)\n",
+					dep->name, dep->flags, dep->rfnm_progress);
+			}
 		} else if (frozen && !has_started && !has_pending) {
 			// idle-frozen: log ONCE per freeze so the wedge state is visible even
 			// when this ep holds nothing (the stall then lives upstream of dwc3)
@@ -1705,6 +1749,19 @@ static int __dwc3_gadget_kick_transfer_real(struct dwc3_ep *dep)
 	int				starting;
 	int				ret;
 	u32				cmd;
+
+	/*
+	 * Never start/update a transfer while an END_TRANSFER is owed or deferred:
+	 * kicking through DELAY_STOP / END_TRANSFER_PENDING arms TRBs that the
+	 * outstanding ENDXFER then cancels or replays (observed as double delivery
+	 * of every started IN request at session boundaries). Park the kick behind
+	 * DELAY_START instead - the ENDXFER-completion handler restarts it. This
+	 * guards every kick path, including the RFNM stall-work reclaim.
+	 */
+	if (dep->flags & (DWC3_EP_END_TRANSFER_PENDING | DWC3_EP_DELAY_STOP)) {
+		dep->flags |= DWC3_EP_DELAY_START;
+		return 0;
+	}
 
 	/*
 	 * Note that it's normal to have no new TRBs prepared (i.e. ret == 0).
