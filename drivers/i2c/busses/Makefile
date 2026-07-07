@@ -158,7 +158,7 @@ obj-$(CONFIG_SCx200_ACB)	+= scx200_acb.o
 obj-$(CONFIG_I2C_FSI)		+= i2c-fsi.o
 obj-$(CONFIG_I2C_VIRTIO)	+= i2c-virtio.o
 
-obj-$(CONFIG_RFNM_SI5510)	+= i2c-rfnm-si5510.o
+obj-$(CONFIG_RFNM_SI5510)	+= i2c-rfnm-si5510.o i2c-rfnm-si5510-fotf.o
 obj-$(CONFIG_RFNM_BOOTCONFIG)	+= i2c-rfnm-bootconfig.o
 
 ccflags-$(CONFIG_I2C_DEBUG_BUS) := -DDEBUG

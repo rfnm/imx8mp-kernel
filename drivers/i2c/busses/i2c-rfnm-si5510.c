@@ -9,6 +9,8 @@
 #include <linux/i2c.h>
 #include <linux/mutex.h>
 
+#include "si5510_fotf.h"
+
 typedef unsigned char       uint8_t;
 typedef   signed char        int8_t;
 
@@ -261,85 +263,41 @@ static int rfnm_si5510_wait_clock_stable(struct i2c_client *client) {
 }
 
 int rfnm_si5510_dcs_freq_supported(uint64_t freq) {
-	uint32_t idx;
-
-	// the FOTF index is keyed in integer kHz; a non-multiple-of-1000 target would silently program
-	// the floor kHz below (freq / 1000 truncates) - exact or refuse (issue #11)
+	// plans are generated on an integer-kHz grid; a non-multiple-of-1000 target would silently
+	// program the floor kHz below (freq / 1000 truncates) - exact or refuse (issue #11)
 	if(freq % 1000) {
 		return 0;
 	}
 
-	for(idx = 0; idx < RFNM_SI5510_NUM_INDEX_ELEMS; idx++) {
-		if(rfnm_si5510_compression_index[idx].freq == (freq / 1000)) {
-			return 1;
-		}
-	}
-
-	return 0;
+	return si5510_fotf_supported(freq / 1000);
 }
 EXPORT_SYMBOL(rfnm_si5510_dcs_freq_supported);
 
 static int rfnm_si5510_set_dcs_freq_work(struct i2c_client *client, uint64_t freq) {
 
-	uint8_t *fotf_nb = (uint8_t *) kzalloc(0xff, GFP_KERNEL);
-	uint8_t fotf_nb_size = 0;
-
-	uint32_t idx = 0;
-	uint32_t idx_replay_to = 0;
-	uint32_t b;
-	int base_idx;
+	uint8_t fotf_nb[SI5510_FOTF_MAX_LEN];
+	int fotf_nb_size;
 
 	if(!client) {
-		kfree(fotf_nb);
 		return -ENODEV;
 	}
 
-	if(!fotf_nb) {
-		return -ENOMEM;
-	}
-
-	while (idx < RFNM_SI5510_NUM_INDEX_ELEMS) {
-		if (rfnm_si5510_compression_index[idx].freq == (freq / 1000)) {
-			idx_replay_to = idx;
-			/* Start from the nearest full configuration, then replay overlays up to the requested frequency. */
-			for(base_idx = idx; base_idx >= 0; base_idx--) {
-				if (rfnm_si5510_compression_index[base_idx].type == 0) {
-					fotf_nb_size = rfnm_si5510_compression_index[base_idx].size;
-					memcpy(fotf_nb, &rfnm_si5510_compressed_bin[rfnm_si5510_compression_index[base_idx].start], fotf_nb_size);
-					idx = base_idx;
-					break;
-				}
-			}
-			while (idx <= idx_replay_to) {
-				if (rfnm_si5510_compression_index[idx].type == 1) {
-					for (b = 0; b < rfnm_si5510_compression_index[idx].size; b+=2) {
-						//uint8_t fotf_nb_size2 = rfnm_si5510_compression_index[idx].size;
-						//uint8_t fotf_nb_start = rfnm_si5510_compression_index[idx].start;
-						uint8_t* br = (uint8_t*)&rfnm_si5510_compressed_bin[rfnm_si5510_compression_index[idx].start];
-
-						fotf_nb[br[b]] = br[b + 1];
-					}
-				}
-				idx++;
-			}
-			break;
-		}
-		idx++;
-	}
-
-	if(!fotf_nb_size) {
-		printk("RFNM: Si5510: unsupported LA9310 DCS frequency %llu Hz\n", (unsigned long long)freq);
-		kfree(fotf_nb);
+	if(freq % 1000) {
+		printk("RFNM: Si5510: unsupported LA9310 DCS frequency %llu Hz (not on the 1 kHz grid)\n", (unsigned long long)freq);
 		return -EINVAL;
 	}
 
-	printk("RFNM: Si5510: setting LA9310 to %llu kHz, idx %d size %d\n", (unsigned long long)(freq / 1000), idx, fotf_nb_size);
-	/*for(b = 0; b < fotf_nb_size; b++) {
-		printk("%02x ", fotf_nb[b]);
-	}*/
+	/* the NB FOTF plan is computed from scratch (RE'd CBPro planner math, byte-exact against the
+	 * full 199,100-plan corpus) - no plan table in the kernel anymore */
+	fotf_nb_size = si5510_fotf_gen(freq / 1000, fotf_nb, sizeof(fotf_nb));
+	if(fotf_nb_size <= 0) {
+		printk("RFNM: Si5510: unsupported LA9310 DCS frequency %llu Hz\n", (unsigned long long)freq);
+		return -EINVAL;
+	}
+
+	printk("RFNM: Si5510: setting LA9310 to %llu kHz, plan size %d\n", (unsigned long long)(freq / 1000), fotf_nb_size);
 
 	rfnm_si5510_host_load(client, fotf_nb, fotf_nb_size);
-	kfree(fotf_nb);
 	return 0;
 }
 
@@ -394,7 +352,7 @@ void rfnm_si5510_set_dco(struct i2c_client *client, int32_t val) {
 	rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 2);
 
 	if(((i2c_read_buf[0] & 0xf0 ) == 0x80) && ((i2c_read_buf[1] & 0x01 ) == 0x00)) {
-		printk("RFNM: Si5510 DCO set to %d ppb\n", val);
+		printk("RFNM: Si5510 DCO set to %d steps (0.1 ppb/step, absolute)\n", val);
 	}
 	else {
 		printk("RFNM: failed to set Si5510 DCO\n");
@@ -439,24 +397,123 @@ static DEVICE_ATTR_WO(rfnm_set_dcs_freq);
 static ssize_t rfnm_set_dco_ppb_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
 
 	struct i2c_client *client = to_i2c_client(dev);
-	
-	int32_t dco_offset;
 
-    if (kstrtos32(&buf[0], 10, &dco_offset) != 0) {
+	int32_t ppb;
+
+	if (kstrtos32(&buf[0], 10, &ppb) != 0) {
 		return -EINVAL;
 	}
 
-	//if(reqfreq < 1000 || reqfreq > 2000000) {
-	//	printk("RFNM: Invalid DCS frequency requested, valid range is [1 - 200] MHz, expressed in KHz. Eg, 122880 for 122.88 MHz\n");
-	//	return -EINVAL;
-	//}
+	if(ppb < -10000 || ppb > 10000) {
+		printk("RFNM: Invalid DCO offset %d ppb, configured MR DCO range is +-10000 ppb (+-10 ppm)\n", ppb);
+		return -EINVAL;
+	}
 
-	rfnm_si5510_set_dco(client, dco_offset);
+	// The 0x24 wire unit is DCO STEPS, one MR step = 0.100000039438 ppb (a base-config plan
+	// property - see r/si5510/RE/SI5510-HANDOFF.md 3.1). steps = ppb * 10 is the correctly
+	// rounded conversion over the whole +-10000 ppb range (max error 0.04 step). This
+	// attribute used to pass the raw value through (i.e. it took steps and overstated the
+	// pull ~10x); raw steps now live in rfnm_set_dco_steps below.
+	rfnm_si5510_set_dco(client, ppb * 10);
 
 	return count;
 }
 
 static DEVICE_ATTR_WO(rfnm_set_dco_ppb);
+
+
+static ssize_t rfnm_set_dco_steps_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
+
+	struct i2c_client *client = to_i2c_client(dev);
+
+	int32_t steps;
+
+	if (kstrtos32(&buf[0], 10, &steps) != 0) {
+		return -EINVAL;
+	}
+
+	if(steps < -100000 || steps > 100000) {
+		printk("RFNM: Invalid DCO offset %d steps, configured MR DCO range is +-100000 steps (+-10 ppm)\n", steps);
+		return -EINVAL;
+	}
+
+	// raw absolute NUM_STEPS for opcode 0x24 - full 0.1 ppb resolution (cellsyncd's servo
+	// writes this one; rfnm_set_dco_ppb above is the human-facing integer-ppb knob)
+	rfnm_si5510_set_dco(client, steps);
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(rfnm_set_dco_steps);
+
+
+
+/* --- siggen: programmable bench output on OUT9 (NA divider) --------------------------
+ * OUT9 = Fvco/(NA*R9). Retuning HOST_LOADs an NA FOTF plan computed from scratch by
+ * si5510_fotf_gen_na() (RE'd CBPro planner math, byte-exact vs the corpus) - no plan
+ * table - and NEVER resets the LA9310: OUT9 is a bench clock, isolated from the NB/OUT13
+ * radio path. rfnm_ext_ref_out stays as the 10 MHz on/off compat alias.
+ *
+ * SAFETY: an NA retune moves the shared NA fractional divider. It is only safe once the
+ * base project has evicted the PCIe refclk (OUT4/OUT5) off NA onto Q dividers (the rev4
+ * base; see docs/OUT9-SIGGEN-PLAN.md). Against a base that still carries PCIe on NA this
+ * would move the PCIe clock. Retuning is an explicit sysfs action, gated on that base. */
+static uint32_t rfnm_siggen_freq_khz;
+
+static int rfnm_si5510_set_siggen_freq(struct i2c_client *client, uint32_t khz) {
+
+	uint8_t fotf_na[SI5510_FOTF_NA_MAX_LEN];
+	int fotf_na_size;
+
+	if(!client) {
+		return -ENODEV;
+	}
+
+	if(khz == 0) {
+		// 0 = turn the output off
+		rfnm_si5510_set_output_status(client, 9, 0);
+		rfnm_siggen_freq_khz = 0;
+		return 0;
+	}
+
+	if(!si5510_fotf_na_supported(khz)) {
+		printk("RFNM: Si5510: unsupported siggen frequency %u kHz (valid range [1 - 200] MHz in kHz)\n", khz);
+		return -EINVAL;
+	}
+
+	fotf_na_size = si5510_fotf_gen_na(khz, fotf_na, sizeof(fotf_na));
+	if(fotf_na_size <= 0) {
+		printk("RFNM: Si5510: failed to generate siggen plan for %u kHz\n", khz);
+		return -EINVAL;
+	}
+
+	printk("RFNM: Si5510: retuning siggen (OUT9/NA) to %u kHz, plan size %d\n", khz, fotf_na_size);
+
+	rfnm_si5510_host_load(client, fotf_na, fotf_na_size);
+	rfnm_si5510_set_output_status(client, 9, 1);
+
+	rfnm_siggen_freq_khz = khz;
+	return 0;
+}
+
+static ssize_t rfnm_set_siggen_freq_show(struct device *dev, struct device_attribute *attr, char *buf) {
+
+	return sysfs_emit(buf, "%u\n", rfnm_siggen_freq_khz);
+}
+
+static ssize_t rfnm_set_siggen_freq_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count) {
+
+	struct i2c_client *client = to_i2c_client(dev);
+	uint32_t khz;
+
+	if(kstrtou32(&buf[0], 10, &khz) != 0) {
+		return -EINVAL;
+	}
+
+	return rfnm_si5510_set_siggen_freq(client, khz) ? -EINVAL : count;
+}
+
+static DEVICE_ATTR_RW(rfnm_set_siggen_freq);
 
 
 
@@ -827,9 +884,19 @@ repeat_search:
 		printk("RFNM: failed to create device file for rfnm_set_dco_ppb");
 	}
 
+	err = device_create_file(&client->dev, &dev_attr_rfnm_set_dco_steps);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_set_dco_steps");
+	}
+
 	err = device_create_file(&client->dev, &dev_attr_rfnm_reset_la9310);
 	if (err < 0) {
 		printk("RFNM: failed to create device file for rfnm_reset_la9310");
+	}
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_set_siggen_freq);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_set_siggen_freq");
 	}
 	//device_remove_file(&client->dev, &(dev_attr_rfnm_show_board_info));
 
