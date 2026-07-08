@@ -165,26 +165,39 @@ uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
 	return (i2c_read_buf[0] == 0x80 && i2c_read_buf[1] == 0x00 && i2c_read_buf[2] == 0 && i2c_read_buf[3] == 0 && i2c_read_buf[4] == 0);
 }
 
+static int rfnm_si5510_plan_board_id(int board_id) {
+	// MT3812 (Yucca, id 5) needs the same clocks as Granita, so reuse the Granita frequency
+	// plans for it. Plan-selection cheat ONLY - the bootconfig ids stay untouched so driver
+	// binding and everything else still sees the real board id.
+	if(board_id == RFNM_DAUGHTERBOARD_YUCCA) {
+		return RFNM_DAUGHTERBOARD_GRANITA;
+	}
+	return board_id;
+}
+
 int can_use_si5510_config(struct rfnm_bootconfig *cfg, int daughterboard_1, int daughterboard_2) {
+	int id0 = rfnm_si5510_plan_board_id(cfg->daughterboard_eeprom[0].board_id);
+	int id1 = rfnm_si5510_plan_board_id(cfg->daughterboard_eeprom[1].board_id);
+
 	if(daughterboard_1 == daughterboard_2) {
 		// relax conditions: only need to match one daughterboard
 		// (to account for missing or unsupported daughterboards)
 		if(
-			(cfg->daughterboard_eeprom[0].board_id == daughterboard_1 && cfg->daughterboard_eeprom[1].board_id == daughterboard_1) || 
-			
-			(cfg->daughterboard_eeprom[0].board_id == daughterboard_1 && (
-				cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_NOT_FOUND || cfg->daughterboard_eeprom[1].board_id == RFNM_DAUGHTERBOARD_BREAKOUT
-			)) || 
-			(cfg->daughterboard_eeprom[1].board_id == daughterboard_1 && (
-				cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_NOT_FOUND || cfg->daughterboard_eeprom[0].board_id == RFNM_DAUGHTERBOARD_BREAKOUT
+			(id0 == daughterboard_1 && id1 == daughterboard_1) ||
+
+			(id0 == daughterboard_1 && (
+				cfg->daughterboard_present[1] == RFNM_DAUGHTERBOARD_NOT_FOUND || id1 == RFNM_DAUGHTERBOARD_BREAKOUT
+			)) ||
+			(id1 == daughterboard_1 && (
+				cfg->daughterboard_present[0] == RFNM_DAUGHTERBOARD_NOT_FOUND || id0 == RFNM_DAUGHTERBOARD_BREAKOUT
 			))
-			
+
 		) {
 			//printk("RFNM: board ids %d %d present %d %d", cfg->daughterboard_eeprom[0].board_id, cfg->daughterboard_eeprom[1].board_id, cfg->daughterboard_present[0], cfg->daughterboard_present[1]);
 			return 1;
 		}
 	} else {
-		if(cfg->daughterboard_eeprom[0].board_id == daughterboard_1 && cfg->daughterboard_eeprom[1].board_id == daughterboard_2) {
+		if(id0 == daughterboard_1 && id1 == daughterboard_2) {
 			return 1;
 		}
 	}
