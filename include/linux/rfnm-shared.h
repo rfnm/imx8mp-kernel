@@ -171,6 +171,14 @@ struct rfnm_dgb {
 	void * tx_ch_set;
 	void * tx_ch_get;
 
+	// optional analog RX DC trim (NULL if the dgb driver has none), board-native trim codes.
+	// Deliberately NOT part of the rx_ch struct: rfic_dc_i/q there are client-owned manual
+	// values (zero-skipped, clobbered by every apply memcpy) while this steers hardware state
+	// below the struct. AGC gain steps ride the normal rx_ch_set path instead, which every
+	// dgb driver must keep delta-optimized (skip unchanged stages, no side effects on a
+	// gain-only restep). Must be safe against a concurrent rx_ch_set (serialize internally).
+	int (*rx_dc_trim)(struct rfnm_dgb *dgb_dt, int ch_id, int dc_i, int dc_q);
+
 	uint8_t dac_ifs;
 	uint8_t adc_iqswap[2];
 	uint8_t dac_iqswap[2];
