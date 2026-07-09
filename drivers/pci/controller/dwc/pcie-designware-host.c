@@ -403,7 +403,6 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	struct pci_host_bridge *bridge;
 	struct resource *res;
 	int ret;
-	u64 *msi_vaddr;
 
 	raw_spin_lock_init(&pp->lock);
 
