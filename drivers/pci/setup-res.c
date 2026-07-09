@@ -88,9 +88,6 @@ static void pci_std_update_resource(struct pci_dev *dev, int resno)
 	} else
 		return;
 
-		pci_info(dev, "######BAR %d: update new %#08x current %#08x)\n",
-                        resno, new, check);
-
 	/*
 	 * We can't update a 64-bit BAR atomically, so when possible,
 	 * disable decoding so that a half-updated BAR won't conflict
@@ -362,7 +359,7 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 
 	res->flags &= ~IORESOURCE_UNSET;
 	res->flags &= ~IORESOURCE_STARTALIGN;
-	pci_info(dev, "BAR %d: assigned %pRi (%lldMB %lldKB)\n", resno, res,size/1024/1024,size/1024);
+	pci_info(dev, "BAR %d: assigned %pR (%lldMB %lldKB)\n", resno, res, size/1024/1024, size/1024);
 	if (resno < PCI_BRIDGE_RESOURCES)
 		pci_update_resource(dev, resno);
 

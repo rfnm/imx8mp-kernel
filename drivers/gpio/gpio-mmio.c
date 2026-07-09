@@ -224,8 +224,6 @@ static void bgpio_set(struct gpio_chip *gc, unsigned int gpio, int val)
 
 	raw_spin_lock_irqsave(&gc->bgpio_lock, flags);
 
-	printk("bgpio_set\n");
-
 	gc->bgpio_data = gc->read_reg(gc->reg_set);
 
 	if (val)
@@ -243,8 +241,6 @@ static void bgpio_set_with_clear(struct gpio_chip *gc, unsigned int gpio,
 {
 	unsigned long mask = bgpio_line2mask(gc, gpio);
 
-	printk("bgpio_set_with_clear\n");
-
 	if (val)
 		gc->write_reg(gc->reg_set, mask);
 	else
@@ -258,10 +254,8 @@ static void bgpio_set_set(struct gpio_chip *gc, unsigned int gpio, int val)
 
 	raw_spin_lock_irqsave(&gc->bgpio_lock, flags);
 
-	// as we are modifying gpios in our rfnm-gpio driver, read it back before changing it 
+	// as we are modifying gpios in our rfnm-gpio driver, read it back before changing it
 	gc->bgpio_data = gc->read_reg(gc->reg_set);
-
-	//printk("bgpio_set_set %x %x %x\n", gc->reg_set, gc->bgpio_data, mask);
 
 	if (val)
 		gc->bgpio_data |= mask;
@@ -303,7 +297,6 @@ static void bgpio_set_multiple_single_reg(struct gpio_chip *gc,
 
 	bgpio_multiple_get_masks(gc, mask, bits, &set_mask, &clear_mask);
 
-	printk("bgpio_set_multiple_single_reg\n");
 	//gc->bgpio_data = gc->read_reg(reg);
 
 	gc->bgpio_data |= set_mask;

@@ -316,14 +316,16 @@ __setup("pcie_phy_tuned=", imx8_pcie_phy_fine_tune);
 static int imx8_pcie_phy_probe(struct platform_device *pdev)
 {
 	struct rfnm_bootconfig *cfg;
-	struct rfnm_eeprom_data *eeprom_data;
 	cfg = memremap(RFNM_BOOTCONFIG_PHYADDR, SZ_4M, MEMREMAP_WB);
+	if (!cfg)
+		return -ENOMEM;
 
 	if(cfg->pcie_clock_ready == 0xff) {
 		printk("RFNM: Deferring PCIe probe...\n");
 		memunmap(cfg);
 		return -EPROBE_DEFER;
 	}
+	memunmap(cfg);
 
 	struct phy_provider *phy_provider;
 	struct device *dev = &pdev->dev;
