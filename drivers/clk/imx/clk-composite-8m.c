@@ -290,22 +290,21 @@ struct clk_hw *__imx8m_clk_hw_composite(const char *name,
 	if (!gate)
 		goto fail;
 
-	// need to force skip gate registration to boot m7 from remoteproc without uboot help... 
-	// (there goes two hours) 
-	if(1) {
-        gate_hw  = NULL;
-        gate_ops = NULL;
-	} else {
+	gate_hw = &gate->hw;
+	gate->reg = reg;
+	gate->bit_idx = PCG_CGC_SHIFT;
+	gate->lock = &imx_ccm_lock;
+	if (!mcore_booted)
+		gate_ops = &clk_gate_ops;
+	else
+		gate_ops = &imx8m_clk_composite_gate_ops;
 
-		gate_hw = &gate->hw;
-		gate->reg = reg;
-		gate->bit_idx = PCG_CGC_SHIFT;
-		gate->lock = &imx_ccm_lock;
-		if (!mcore_booted)
-			gate_ops = &clk_gate_ops;
-		else
-			gate_ops = &imx8m_clk_composite_gate_ops;
-	}
+	/* RFNM: the M7 may be started via remoteproc long after boot, without u-boot
+	 * involvement, and it borrows composite clocks nothing on the A-core side holds a
+	 * reference to. The late-boot unused-clock sweep used to gate them out from under it
+	 * (the old workaround skipped gate registration entirely, leaving every composite
+	 * ungateable at runtime too). Keep the gates, but exempt them from the sweep. */
+	flags |= CLK_IGNORE_UNUSED;
 
 	hw = clk_hw_register_composite(NULL, name, parent_names, num_parents,
 			mux_hw, mux_ops, div_hw,
