@@ -879,9 +879,11 @@ repeat_search:
 		return error;
 	}
 
-	// cannot load wsled because it's not init'd yet... not sure why the order changed
-	//rfnm_wsled_set(0, 0, 0, 0, 0xff);
-	//rfnm_wsled_send_chain(0);
+	// Boot indication restored from the pre-6.6 kernel: motherboard LED goes blue only once
+	// the reference clock is locked. The old "wsled not init'd yet" note is stale - wsled
+	// probes at ~0.8 s, well before this point (~2.2 s).
+	rfnm_wsled_set(0, 0, 0, 0, 0xff);
+	rfnm_wsled_send_chain(0);
 
 	int err;
 
