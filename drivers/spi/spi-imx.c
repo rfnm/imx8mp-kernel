@@ -644,13 +644,11 @@ static int mx51_ecspi_prepare_message(struct spi_imx_data *spi_imx,
 			spi_imx_target_dma_convert(xfer, DMA_TO_DEVICE);
 	};
 
-#if 1
-	   /* set chip select delay */
-    period = readl(spi_imx->base + MX51_ECSPI_PERIODREG);
-    period &= MX51_ECSPI_PERIODREG_CSDCTL(0x3f);
-    period |= MX51_ECSPI_PERIODREG_CSDCTL(spi_imx->csd_ctl);
-    writel(period, spi_imx->base + MX51_ECSPI_PERIODREG);
-#endif
+	/* set chip select delay */
+	period = readl(spi_imx->base + MX51_ECSPI_PERIODREG);
+	period &= ~MX51_ECSPI_PERIODREG_CSDCTL(0x3f);
+	period |= MX51_ECSPI_PERIODREG_CSDCTL(spi_imx->csd_ctl);
+	writel(period, spi_imx->base + MX51_ECSPI_PERIODREG);
 	/*
 	 * eCSPI burst completion by Chip Select signal in Target mode
 	 * is not functional for imx53 Soc, config SPI burst completed when
@@ -1883,13 +1881,13 @@ static int spi_imx_probe(struct platform_device *pdev)
 
 
 	ret = of_property_read_u32(np, "fsl,spi-csd-ctl", &csd_ctl);
-    if ((ret < 0) || (csd_ctl >= 0x63)) {
-            /* '63' is maximum */
-            csd_ctl = 0;
-    }
+	if ((ret < 0) || (csd_ctl > 63)) {
+		/* 63 is the CSD_CTL field maximum */
+		csd_ctl = 0;
+	}
 
-    printk("Delaying spi clock from CS by %d clocks\n", csd_ctl);
-
+	if (csd_ctl)
+		dev_info(&pdev->dev, "delaying SPI clock from CS by %d clocks\n", csd_ctl);
 
 
 	platform_set_drvdata(pdev, controller);
