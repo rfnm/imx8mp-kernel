@@ -113,6 +113,10 @@ static const struct rfnm_user_setting rfnm_user_settings[RFNM_USER_SETTING_COUNT
 	[RFNM_USER_SETTING_DDNS_PUBLIC]    = { "ddns_public",        1,       1, 0, 0 },
 	[RFNM_USER_SETTING_LED_BRIGHTNESS] = { "led_brightness",     8,       3, 0, 7 },	// 0 = off .. 7 = max
 	[RFNM_USER_SETTING_DDNS_NICKNAME]  = { "ddns_nickname",  8 * 8, 17 * 8, 1, 0 },
+	// DCO warm-start cal (written by cellsyncd on stable TRACK, applied by si5510 at probe).
+	// steps are stored biased (+100000) because this framework is unsigned; def = bias = 0 steps.
+	[RFNM_USER_SETTING_DCO_CAL_VALID]  = { "dco_cal_valid",      2,       1, 0, 0 },
+	[RFNM_USER_SETTING_DCO_CAL_STEPS]  = { "dco_cal_steps",     16,      18, 0, 100000 },
 };
 
 static DEFINE_MUTEX(rfnm_user_mtx);

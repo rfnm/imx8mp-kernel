@@ -728,6 +728,24 @@ static int rfnm_si5510_probe(struct i2c_client *client) {
 
 	if(device_property_read_bool(&client->dev, "rfnm,skip-5510-init-quirk")) {
 		cfg->pcie_clock_ready = 1;
+
+	// warm-start DCO from the EEPROM cal stored by cellsyncd - makes the LTE-disciplined
+	// correction live on every boot, whichever app runs. -EAGAIN (bootconfig probe order)
+	// or an unset/invalid cal -> skip silently; cellsyncd re-seeds and corrects later.
+	{
+		uint32_t dco_valid = 0, dco_biased = 0;
+
+		if(!rfnm_user_setting_get(RFNM_USER_SETTING_DCO_CAL_VALID, &dco_valid) && dco_valid &&
+		   !rfnm_user_setting_get(RFNM_USER_SETTING_DCO_CAL_STEPS, &dco_biased)) {
+			int32_t dco_steps = (int32_t)dco_biased - 100000;
+
+			if(dco_steps >= -100000 && dco_steps <= 100000) {
+				rfnm_si5510_set_dco(client, dco_steps);
+				printk("RFNM: Si5510: applied persisted DCO cal (%d steps = %d.%d ppb)\n",
+				       dco_steps, dco_steps / 10, abs(dco_steps % 10));
+			}
+		}
+	}
 		printk("RFNM: skip-5510-init-quirk\n");
 		return 0;
 	}

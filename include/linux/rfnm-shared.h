@@ -98,6 +98,9 @@ enum rfnm_user_setting_id {
 	RFNM_USER_SETTING_DDNS_PUBLIC,		// 1 bit
 	RFNM_USER_SETTING_LED_BRIGHTNESS,	// 3 bits, 0 = off .. 7 = max
 	RFNM_USER_SETTING_DDNS_NICKNAME,	// string, 16 chars + NUL
+	RFNM_USER_SETTING_DCO_CAL_VALID,	// 1 bit: a converged DCO cal has been stored
+	RFNM_USER_SETTING_DCO_CAL_STEPS,	// 18 bits, BIASED +100000: stored = steps + 100000
+						// (steps = Si5510 VARIABLE_OFFSET_DCO, 0.1 ppb each, +/-100000)
 	RFNM_USER_SETTING_COUNT
 };
 
