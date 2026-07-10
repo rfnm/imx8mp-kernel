@@ -19,6 +19,11 @@ uint32_t RFNM_SI5510_CMD_BUFFER_SIZE;
 uint32_t rfnm_dcs_freq_hz;
 static struct i2c_client *rfnm_si5510_client;
 
+/* serializes complete Device-API exchanges (command write + CTS poll). Needed once status
+ * attrs are polled by apps: a status command landing inside a chunked HOST_LOAD would
+ * corrupt the plan stream. Leaf lock - nests inside rfnm_la9310_reset_lock. */
+static DEFINE_MUTEX(rfnm_si5510_cmd_lock);
+
 void rfnm_si5510_i2c_read(struct i2c_client *client, uint8_t * buf, int cnt) {
 
 	uint8_t CTS[6] = {0xf0, 0x0f};
@@ -109,6 +114,7 @@ void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen) 
 	host_load_command = kmalloc(RFNM_SI5510_CMD_BUFFER_SIZE + 10, GFP_KERNEL);
 	memcpy(host_load_command, &host_load_command_init[0], 3);
 
+	mutex_lock(&rfnm_si5510_cmd_lock);
 	for (chunkNum = 0; chunkNum < numberOfChunks; ++chunkNum) {
 		int chunkSize = RFNM_SI5510_CMD_BUFFER_SIZE;
 		if (chunkNum == numberOfChunks - 1) {
@@ -123,6 +129,7 @@ void rfnm_si5510_host_load(struct i2c_client *client, char * data, int datalen) 
 			//printk("RFNM: CHUNK %d status is %02x\n", chunkNum, i2c_read_buf[0]);
 		} while(i2c_read_buf[0] != 0x80);
 	}
+	mutex_unlock(&rfnm_si5510_cmd_lock);
 
 	kfree(host_load_command);
 }
@@ -148,18 +155,27 @@ static void rfnm_si5510_boot(struct i2c_client *client) {
 
 uint8_t rfnm_si5510_reference_status(struct i2c_client *client) {
 	uint8_t i2c_read_buf[100] = {0};
-
 	uint8_t reference_status_request[] = { 0xF0, 0x0F, 0x16 };
+	int retries;
+
+	mutex_lock(&rfnm_si5510_cmd_lock);
 	rfnm_si5510_i2c_write(client, reference_status_request, 3);
 
-	do {
-		if (i2c_read_buf[0] == 0x90) {
-			printk("RFNM: FWERR triggered. See text under Common Errors.\n");
-			while (1) {}
-		}
+	for(retries = 0; retries < 100; retries++) {
 		msleep(10);
 		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
-	} while(i2c_read_buf[0] != 0x80);
+		if(i2c_read_buf[0] == 0x80 || i2c_read_buf[0] == 0x90) {
+			break;
+		}
+	}
+	mutex_unlock(&rfnm_si5510_cmd_lock);
+
+	if(i2c_read_buf[0] == 0x90) {
+		// was an unconditional while(1){} hang; this is now app-polled via sysfs, and a
+		// reader must not be able to park a thread forever - report not-locked instead
+		printk("RFNM: FWERR triggered. See text under Common Errors.\n");
+		return 0;
+	}
 
 	// return true if reference PLL is locked, otherwise return false.
 	return (i2c_read_buf[0] == 0x80 && i2c_read_buf[1] == 0x00 && i2c_read_buf[2] == 0 && i2c_read_buf[3] == 0 && i2c_read_buf[4] == 0);
@@ -219,16 +235,18 @@ void rfnm_si5510_set_output_status(struct i2c_client *client, int output_id, int
 		printk("RFNM: Disabling clock output %d\n", output_id);
 	}
 
+	mutex_lock(&rfnm_si5510_cmd_lock);
 	rfnm_si5510_i2c_write(client, send_output_status_request, 8);
 
 	do {
 		if (i2c_read_buf[0] == 0x90) {
 			printk("RFNM: FWERR triggered. See text under Common Errors.\n");
-			while (1) {}
+			break;
 		}
 		msleep(10);
 		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
 	} while(i2c_read_buf[0] != 0x80);
+	mutex_unlock(&rfnm_si5510_cmd_lock);
 }
 
 EXPORT_SYMBOL(rfnm_si5510_set_output_status);
@@ -256,6 +274,117 @@ static ssize_t rfnm_ext_ref_out_store(struct device *dev, struct device_attribut
 }
 
 static DEVICE_ATTR_WO(rfnm_ext_ref_out);
+
+
+/* --- reference/input status (Device-API 0x16 / 0x12) ---------------------------------
+ * RFPLL reference chain on this board (base-plan "Inputs" section + bench decode
+ * 2026-07-10): IN0 = the REF CLK IN edge connector (external 10 MHz), IN2 = the onboard
+ * 12.8 MHz TCXO. Input selection is Automatic, priority IN0 then IN2, auto-revertive -
+ * a valid external 10 MHz always wins, unplugging it falls back to the TCXO.
+ *
+ * INPUT_STATUS (0x12) reply payload: byte0 = INPUT_CLOCK_STATUS, the live OR of the
+ * enabled LOS/OOF/PHMON monitors (0 valid, 1 pending short-term fault, 2 under
+ * validation, 3 invalid); byte1 = LOS, byte2 = OOF, byte3 = phase-monitor flags.
+ * Bytes 1-3 are sticky: they latch faults and clear on read (shared across ALL readers),
+ * so byte0 is the only live verdict. */
+
+#define RFNM_SI5510_IN_ID_EXT_REF	0	/* IN0 */
+#define RFNM_SI5510_IN_ID_TCXO		4	/* IN2 (Device-API in_id: IN0=0, IN1=2, IN2=4) */
+
+int rfnm_si5510_input_status(struct i2c_client *client, uint8_t in_id, uint8_t *status) {
+	uint8_t i2c_read_buf[8] = {0};
+	uint8_t input_status_request[] = { 0xF0, 0x0F, 0x12, in_id };
+	int retries;
+
+	if(!client) {
+		return -ENODEV;
+	}
+
+	mutex_lock(&rfnm_si5510_cmd_lock);
+	rfnm_si5510_i2c_write(client, input_status_request, 4);
+
+	for(retries = 0; retries < 100; retries++) {
+		rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 5);
+		if(i2c_read_buf[0] == 0x80 || i2c_read_buf[0] == 0x90) {
+			break;
+		}
+		msleep(10);
+	}
+	mutex_unlock(&rfnm_si5510_cmd_lock);
+
+	if(i2c_read_buf[0] == 0x90) {
+		printk("RFNM: Si5510: FWERR on INPUT_STATUS(%u)\n", in_id);
+		return -EIO;
+	}
+	if(i2c_read_buf[0] != 0x80) {
+		return -ETIMEDOUT;
+	}
+
+	memcpy(status, &i2c_read_buf[1], 4);
+	return 0;
+}
+
+static const char *rfnm_si5510_input_verdict(uint8_t input_clock_status) {
+	switch(input_clock_status) {
+	case 0: return "valid";
+	case 1: return "pending_fault";
+	case 2: return "validating";
+	case 3: return "invalid";
+	default: return "unknown";
+	}
+}
+
+// the one-file answer to "is a good external 10 MHz on the REF CLK IN connector": 1/0.
+// Selection is automatic + revertive, so valid also means the RFPLL is (or is about to
+// be) disciplined by it. Pairs with rfnm_ext_ref_out above.
+static ssize_t rfnm_ext_ref_in_show(struct device *dev, struct device_attribute *attr, char *buf) {
+	struct i2c_client *client = to_i2c_client(dev);
+	uint8_t status[4];
+	int err;
+
+	err = rfnm_si5510_input_status(client, RFNM_SI5510_IN_ID_EXT_REF, status);
+	if(err) {
+		return err;
+	}
+
+	return sysfs_emit(buf, "%d\n", status[0] == 0);
+}
+
+static DEVICE_ATTR_RO(rfnm_ext_ref_in);
+
+static ssize_t rfnm_input_status_show(struct device *dev, struct device_attribute *attr, char *buf) {
+	struct i2c_client *client = to_i2c_client(dev);
+	static const struct { uint8_t in_id; const char *name; } inputs[] = {
+		{ RFNM_SI5510_IN_ID_EXT_REF, "IN0 ext_ref_in_10mhz" },
+		{ RFNM_SI5510_IN_ID_TCXO, "IN2 onboard_tcxo_12m8" },
+	};
+	ssize_t len = 0;
+	int i, err;
+
+	for(i = 0; i < ARRAY_SIZE(inputs); i++) {
+		uint8_t status[4];
+
+		err = rfnm_si5510_input_status(client, inputs[i].in_id, status);
+		if(err) {
+			return err;
+		}
+
+		len += sysfs_emit_at(buf, len, "%s: %s los=%u oof=%u phmon=0x%x\n",
+				inputs[i].name, rfnm_si5510_input_verdict(status[0]), status[1], status[2], status[3]);
+	}
+
+	return len;
+}
+
+static DEVICE_ATTR_RO(rfnm_input_status);
+
+static ssize_t rfnm_ref_locked_show(struct device *dev, struct device_attribute *attr, char *buf) {
+	struct i2c_client *client = to_i2c_client(dev);
+
+	return sysfs_emit(buf, "%d\n", rfnm_si5510_reference_status(client) ? 1 : 0);
+}
+
+static DEVICE_ATTR_RO(rfnm_ref_locked);
 
 
 static int rfnm_si5510_wait_clock_stable(struct i2c_client *client) {
@@ -361,8 +490,10 @@ void rfnm_si5510_set_dco(struct i2c_client *client, int32_t val) {
 	for(i = 0; i < 4; i++)
 		send_dco_request[4 + i] = (val >> (i << 3)) & 0xFF;
 
+	mutex_lock(&rfnm_si5510_cmd_lock);
 	rfnm_si5510_i2c_write(client, send_dco_request, 8);
 	rfnm_si5510_i2c_read(client, &i2c_read_buf[0], 2);
+	mutex_unlock(&rfnm_si5510_cmd_lock);
 
 	if(((i2c_read_buf[0] & 0xf0 ) == 0x80) && ((i2c_read_buf[1] & 0x01 ) == 0x00)) {
 		printk("RFNM: Si5510 DCO set to %d steps (0.1 ppb/step, absolute)\n", val);
@@ -936,6 +1067,21 @@ repeat_search:
 	err = device_create_file(&client->dev, &dev_attr_rfnm_set_siggen_freq);
 	if (err < 0) {
 		printk("RFNM: failed to create device file for rfnm_set_siggen_freq");
+	}
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_ext_ref_in);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_ext_ref_in");
+	}
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_input_status);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_input_status");
+	}
+
+	err = device_create_file(&client->dev, &dev_attr_rfnm_ref_locked);
+	if (err < 0) {
+		printk("RFNM: failed to create device file for rfnm_ref_locked");
 	}
 	//device_remove_file(&client->dev, &(dev_attr_rfnm_show_board_info));
 
