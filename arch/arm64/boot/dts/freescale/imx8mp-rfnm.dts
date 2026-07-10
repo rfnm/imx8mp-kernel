@@ -385,6 +385,15 @@
 	status = "okay";
 };
 
+/* bottom-edge header "PWM3" pin. Pad = SPDIF_TX (best guess pending schematic: the header's
+   GPT1 CMP3/PWM3/GPT1 CAPT1 trio maps cleanly onto the adjacent SPDIF_EXT_CLK/SPDIF_TX/
+   SAI3_TXC pads, and SPDIF is unused on this board so a wrong guess harms nothing). */
+&pwm3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_pwm3>;
+	status = "okay";
+};
+
 
 /*&gpt1 {
 	compatible = "fsl,imx8mp-gpt", "fsl,imx6dl-gpt";
@@ -944,6 +953,12 @@
 		pinctrl_pwm4: pwm4grp {
 			fsl,pins = <
 				MX8MP_IOMUXC_I2C3_SCL__PWM4_OUT           0x00000016
+			>;
+		};
+
+		pinctrl_pwm3: pwm3grp {
+			fsl,pins = <
+				MX8MP_IOMUXC_SPDIF_TX__PWM3_OUT           0x00000016
 			>;
 		};
 
