@@ -109,7 +109,7 @@ struct rfnm_user_setting {
 };
 
 static const struct rfnm_user_setting rfnm_user_settings[RFNM_USER_SETTING_COUNT] = {
-	[RFNM_USER_SETTING_DDNS_ENABLED]   = { "ddns_enabled",       0,       1, 0, 0 },
+	[RFNM_USER_SETTING_DDNS_ENABLED]   = { "ddns_enabled",       0,       1, 0, 1 },	// default ON (2026-07-19): virgin boards self-register <serial>.rfnm.me; user 0 persists
 	[RFNM_USER_SETTING_DDNS_PUBLIC]    = { "ddns_public",        1,       1, 0, 0 },
 	[RFNM_USER_SETTING_LED_BRIGHTNESS] = { "led_brightness",     8,       3, 0, 7 },	// 0 = off .. 7 = max
 	[RFNM_USER_SETTING_DDNS_NICKNAME]  = { "ddns_nickname",  8 * 8, 17 * 8, 1, 0 },
