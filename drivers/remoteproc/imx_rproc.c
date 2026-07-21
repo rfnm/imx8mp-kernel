@@ -136,6 +136,9 @@ struct imx_rproc {
 	struct sys_off_data		data;
 	cpumask_t			cpus;
 	cpumask_t			offlined_cpus;
+	void __iomem			*rdc_base;
+	u32				rdc_restore[8];
+	int				rdc_restore_cnt;
 };
 
 static const struct imx_rproc_att imx_rproc_att_imx95_m7[] = {
@@ -494,6 +497,27 @@ static int imx_rproc_psci_stop(struct rproc *rproc)
 }
 
 
+/*
+ * defect #76: the bl31 SMC start handler applies its M-core RDC peripheral
+ * table (UART4/GPT1/GPT3/I2C3 -> domain 1 only) on EVERY core start. Any
+ * peripheral in that table that Linux owns dies with synchronous external
+ * aborts on register access from that moment. The DT lists the PDAP indices
+ * to hand back to all domains after each start (I2C3 = 68, the DGB slot-1
+ * i2c bus the kernel drives).
+ */
+static void imx_rproc_rdc_restore(struct imx_rproc *priv)
+{
+	int i;
+
+	for (i = 0; i < priv->rdc_restore_cnt; i++) {
+		u32 idx = priv->rdc_restore[i];
+
+		writel(0xFF, priv->rdc_base + 0x400 + 4 * idx);
+		dev_info(priv->dev, "RDC PDAP %u restored to all-domain access (0x%x)\n",
+			 idx, readl(priv->rdc_base + 0x400 + 4 * idx));
+	}
+}
+
 static int imx_rproc_start(struct rproc *rproc)
 {
 	struct imx_rproc *priv = rproc->priv;
@@ -537,6 +561,8 @@ static int imx_rproc_start(struct rproc *rproc)
 
 	if (ret)
 		dev_err(dev, "Failed to enable remote core!\n");
+	else if (priv->rdc_restore_cnt > 0)
+		imx_rproc_rdc_restore(priv);
 
 	if (priv->startup_delay)
 		msleep(priv->startup_delay);
@@ -1434,6 +1460,17 @@ static int imx_rproc_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(dev->of_node, "fsl,startup-delay-ms", &priv->startup_delay);
 	if (ret)
 		priv->startup_delay = 0;
+
+	priv->rdc_restore_cnt = of_property_read_variable_u32_array(dev->of_node,
+			"rfnm,rdc-restore-pdap", priv->rdc_restore, 1,
+			ARRAY_SIZE(priv->rdc_restore));
+	if (priv->rdc_restore_cnt > 0) {
+		priv->rdc_base = devm_ioremap(dev, 0x303d0000, SZ_4K); /* i.MX8M RDC */
+		if (!priv->rdc_base) {
+			dev_err(dev, "RDC ioremap failed, rdc-restore disabled\n");
+			priv->rdc_restore_cnt = 0;
+		}
+	}
 
 	ret = rproc_add(rproc);
 	if (ret) {

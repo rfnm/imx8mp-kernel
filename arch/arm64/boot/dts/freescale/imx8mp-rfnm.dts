@@ -145,6 +145,11 @@
 		memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdevbuffer>, <&m4_reserved>, <&m7_ddr_alias>, <&m7_itcm>, <&m7_dtcm>;
 		status = "okay";
 		fsl,startup-delay-ms = <500>;
+		/* bl31's start SMC firewalls its M-core RDC table (UART4/GPT1/GPT3/I2C3)
+		 * to domain 1 on every start. I2C3 (PDAP 68) is the DGB slot-1 bus LINUX
+		 * owns (M7 clocks GPT3 from the pad named I2C3_SDA; the bus itself lives
+		 * on SD1 pads) - defect #76: hand it back after each M7 start. */
+		rfnm,rdc-restore-pdap = <68>;
 
 	//	fsl,rproc-auto-boot = <1>;
 	//	fsl,rproc-fw-name="rfnm_m7_v0.elf";
