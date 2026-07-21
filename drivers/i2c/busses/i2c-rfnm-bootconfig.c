@@ -36,10 +36,29 @@ typedef   signed char        int8_t;
 */
 
 
+// ONE combined write-address + repeated-start read for a whole block. The old shape
+// (per-byte i2c_master_send + UNCHECKED i2c_master_recv, ~80 bus lock/unlock cycles
+// per board-info read, the recv fired even after a NAKed send) was the defect #76
+// amplifier: an empty DGB slot turned every sysfs read into an 80-transaction NAK
+// storm against the controller's error paths.
+static int rfnm_bootconfig_read_block(struct i2c_client *client, uint8_t addr, uint8_t *buf, uint16_t len) {
+
+	struct i2c_msg msgs[2] = {
+		{ .addr = client->addr, .flags = 0, .len = 1, .buf = &addr },
+		{ .addr = client->addr, .flags = I2C_M_RD, .len = len, .buf = buf },
+	};
+	int ret;
+
+	ret = i2c_transfer(client->adapter, msgs, 2);
+	if(ret < 0) {
+		return ret;
+	}
+	return ret == 2 ? 0 : -EIO;
+}
+
 void rfnm_bootconfig_read_eeprom(struct i2c_client *client, uint8_t addr, uint8_t * buf) {
 
-	i2c_master_send(client, &addr, 1);
-	i2c_master_recv(client, buf, 1);
+	rfnm_bootconfig_read_block(client, addr, buf, 1);
 }
 
 int rfnm_bootconfig_write_eeprom(struct i2c_client *client, uint8_t addr, uint8_t val) {
@@ -56,6 +75,9 @@ retry:
 
 	if(ret < 0) {
 		if(retry_id++ < 30) {
+			// ack-poll pacing: the EEPROM NAKs while its internal write cycle runs
+			// (tWR <= 5 ms). The old bare goto hammered the bus at full rate.
+			usleep_range(500, 1000);
 			goto retry;
 		} else {
 			return -1;
@@ -66,23 +88,16 @@ retry:
 }
 
 int rfnm_load_board_info(struct device *dev, struct rfnm_eeprom_data *eeprom_data) {
-	
-	int i, ret;
-	uint8_t i2cbuf;
-	uint8_t *eeprom_data_ptr;
-	eeprom_data_ptr = (uint8_t*) eeprom_data;
+
 	struct i2c_client *client = to_i2c_client(dev);
 
 	memset(eeprom_data, 0, sizeof(*eeprom_data));
-	
-	for(i = 0; i < sizeof(*eeprom_data); i++) {
-		rfnm_bootconfig_read_eeprom(client, i, &i2cbuf);
-		//printk("RFNM: %02x\n", i2cbuf);
-		*(eeprom_data_ptr + i) = i2cbuf;
+
+	if(rfnm_bootconfig_read_block(client, 0, (uint8_t*) eeprom_data, sizeof(*eeprom_data))) {
+		return -1;
 	}
 
-	if(eeprom_data->crc != crc32(0x80000000, eeprom_data_ptr, sizeof(*eeprom_data) - 4)) {
-		//printk("RFNM: crc mismatch, eeprom read failed %x %x\n", eeprom_data->crc, crc32(0x80000000, eeprom_data_ptr, sizeof(*eeprom_data) - 4));
+	if(eeprom_data->crc != crc32(0x80000000, (uint8_t*) eeprom_data, sizeof(*eeprom_data) - 4)) {
 		return -1;
 	}
 
@@ -197,7 +212,6 @@ static void rfnm_user_block_defaults(struct rfnm_eeprom_user_config *b) {
 static int rfnm_user_block_commit(void) {
 
 	const uint8_t *p = (const uint8_t*) &rfnm_user_block;
-	uint8_t i2cbuf;
 	int i, ret, dirty = 0;
 
 	for(i = 0; i < sizeof(rfnm_user_block); i++) {
@@ -217,9 +231,9 @@ static int rfnm_user_block_commit(void) {
 	}
 
 	// full read-back keeps the shadow honest even after a failed/partial write
-	for(i = 0; i < sizeof(rfnm_user_block); i++) {
-		rfnm_bootconfig_read_eeprom(rfnm_user_client, 128 + i, &i2cbuf);
-		rfnm_user_shadow[i] = i2cbuf;
+	if(rfnm_bootconfig_read_block(rfnm_user_client, 128, rfnm_user_shadow, sizeof(rfnm_user_block))) {
+		printk("RFNM: user config eeprom read-back failed\n");
+		return -EIO;
 	}
 
 	if(memcmp(rfnm_user_shadow, p, sizeof(rfnm_user_block))) {
@@ -393,13 +407,10 @@ static const struct attribute_group rfnm_user_group = {
 // read the eeprom user half at probe: valid block -> runtime truth, anything else -> defaults
 static void rfnm_user_config_load(struct i2c_client *client) {
 
-	uint8_t i2cbuf;
 	char nick[17];
-	int i;
 
-	for(i = 0; i < sizeof(rfnm_user_shadow); i++) {
-		rfnm_bootconfig_read_eeprom(client, 128 + i, &i2cbuf);
-		rfnm_user_shadow[i] = i2cbuf;
+	if(rfnm_bootconfig_read_block(client, 128, rfnm_user_shadow, sizeof(rfnm_user_shadow))) {
+		memset(rfnm_user_shadow, 0xff, sizeof(rfnm_user_shadow));	// unreadable = invalid block -> defaults
 	}
 
 	memcpy(&rfnm_user_block, rfnm_user_shadow, sizeof(rfnm_user_block));
@@ -420,18 +431,31 @@ static void rfnm_user_config_load(struct i2c_client *client) {
 }
 
 
+// Serve the PROBE-TIME identity, never the wire. Defect #76: the DGB buses are
+// i2c ONLY during the boot quiet-window - once the radio stack runs, the M7 owns
+// the I2C3_SDA ball as its GPT3 clock input (pin_mux.c in the M7 fw; board design),
+// so a live read on that bus is electrically meaningless and killed the reader
+// (external abort/stuck-busy -> reader dies holding the adapter rt_mutex -> board
+// wedge; full receipts in the ledger). Identity cannot change after boot anyway.
 static ssize_t rfnm_show_board_info_show(struct device *dev, struct device_attribute *attr, char *buf) {
 
 	struct i2c_client *client = to_i2c_client(dev);
 	struct i2c_adapter *adapter = client->adapter;
 	int adapter_nr = i2c_adapter_id(adapter);
-	uint8_t i2cbuf;
-	int z;
 	struct rfnm_eeprom_data eeprom_data;
 
-	if(rfnm_load_board_info(dev, &eeprom_data)) {
+	if(!rfnm_cfg) {
 		return snprintf(buf, PAGE_SIZE, "Failed to read eeprom\n");
+	}
+	if(adapter_nr) {
+		if(rfnm_cfg->daughterboard_present[adapter_nr - 1] != RFNM_DAUGHTERBOARD_PRESENT) {
+			return snprintf(buf, PAGE_SIZE, "Failed to read eeprom\n");
+		}
+		memcpy(&eeprom_data, &rfnm_cfg->daughterboard_eeprom[adapter_nr - 1], sizeof(eeprom_data));
 	} else {
+		memcpy(&eeprom_data, &rfnm_cfg->motherboard_eeprom, sizeof(eeprom_data));
+	}
+	{
 		if(adapter_nr) {
 			return snprintf(buf, PAGE_SIZE, "board id %d revision %d serial %s\n", eeprom_data.board_id, eeprom_data.board_revision_id, eeprom_data.serial_number);
 		} else {
