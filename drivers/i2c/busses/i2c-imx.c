@@ -1518,6 +1518,11 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 		if ((result == -ETIMEDOUT) && (i2c_imx->layerscape_bus_recover == 1))
 			i2c_imx_recovery_for_layerscape(i2c_imx);
 		else {
+			/* defect #76: this error return skipped the pm_runtime put -
+			 * every -EAGAIN (arbitration-lost) walked out with the RPM
+			 * reference held and the pairing forever broken */
+			pm_runtime_mark_last_busy(i2c_imx->adapter.dev.parent);
+			pm_runtime_put_autosuspend(i2c_imx->adapter.dev.parent);
 			if (enable_runtime_pm)
 				pm_runtime_disable(i2c_imx->adapter.dev.parent);
 			return result;
