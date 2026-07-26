@@ -510,6 +510,10 @@
 		pinctrl-0 = <&pinctrl_pmic>;
 		interrupt-parent = <&gpio1>;
 		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+		/* #93: reboot = PMIC SW_RST cold reset (rails recycle); PSCI's SoC-internal
+		 * reset leaves the eMMC powered mid-state -> warm-boot lottery, and WDOG_B
+		 * is not routed to the PMIC on this board */
+		nxp,sw-rst-cold-reboot;
 
 		regulators {
 			buck1: BUCK1 {

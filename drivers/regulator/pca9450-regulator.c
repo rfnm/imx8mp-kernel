@@ -4,6 +4,7 @@
  * NXP PCA9450 pmic driver
  */
 
+#include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
@@ -12,10 +13,14 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/reboot.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/pca9450.h>
+
+/* SW_RST key: cold reset, LDO1/LDO2 (SNVS standby domain) ride through */
+#define PCA9450_SWRST_KEY_COLD_LDO12	0x14
 
 struct pc9450_dvs_config {
 	unsigned int run_reg; /* dvs0 */
@@ -36,6 +41,33 @@ struct pca9450 {
 	enum pca9450_chip_type type;
 	unsigned int rcnt;
 	int irq;
+};
+
+/* defect #93: reboot via PMIC SW_RST cold reset (opt-in per board through
+ * nxp,sw-rst-cold-reboot). The default PSCI SYSTEM_RESET is SoC-internal: rails
+ * stay up, the eMMC keeps its HS400ES/transfer state, and whether BootROM or the
+ * next kernel can re-init it is a per-boot lottery (receipted wedges at both
+ * stages). SW_RST key 0x14 makes the PMIC recycle the buck rails, so every
+ * reboot is cold-boot-equivalent. WDOG_B is muxed out of the SoC but not routed
+ * to the PMIC on the RFNM board, so this I2C command is the only PMIC-level
+ * reset path. i2c-imx transfers atomically in restart context (system_state
+ * check in the i2c core), and i2c_smbus is used directly - regmap's lock must
+ * not be taken with interrupts off. */
+static struct i2c_client *pca9450_swrst_client;
+
+static int pca9450_swrst_restart(struct notifier_block *nb, unsigned long action, void *data)
+{
+	i2c_smbus_write_byte_data(pca9450_swrst_client, PCA9450_REG_SWRST,
+				  PCA9450_SWRST_KEY_COLD_LDO12);
+	/* rails drop within ms; if we are still executing after 500 ms the write
+	 * was lost - fall through to the next handler (PSCI) as last resort */
+	mdelay(500);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block pca9450_swrst_nb = {
+	.notifier_call = pca9450_swrst_restart,
+	.priority = 192,	/* above PSCI (129): the rails must actually drop */
 };
 
 static const struct regmap_range pca9450_status_range = {
@@ -1099,6 +1131,15 @@ static int pca9450_i2c_probe(struct i2c_client *i2c)
 				"Failed to enable I2C level translator\n");
 			return ret;
 		}
+	}
+
+	if (of_property_read_bool(i2c->dev.of_node, "nxp,sw-rst-cold-reboot")) {
+		pca9450_swrst_client = i2c;
+		ret = register_restart_handler(&pca9450_swrst_nb);
+		if (ret)
+			dev_err(&i2c->dev, "Failed to register SW_RST restart handler: %d\n", ret);
+		else
+			dev_info(&i2c->dev, "reboot = SW_RST cold reset (rails recycle, #93)\n");
 	}
 
 	/*
