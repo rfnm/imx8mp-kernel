@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/reboot.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
@@ -57,8 +58,14 @@ static struct i2c_client *pca9450_swrst_client;
 
 static int pca9450_swrst_restart(struct notifier_block *nb, unsigned long action, void *data)
 {
-	i2c_smbus_write_byte_data(pca9450_swrst_client, PCA9450_REG_SWRST,
-				  PCA9450_SWRST_KEY_COLD_LDO12);
+	int try;
+
+	for (try = 0; try < 3; try++) {
+		if (i2c_smbus_write_byte_data(pca9450_swrst_client, PCA9450_REG_SWRST,
+					      PCA9450_SWRST_KEY_COLD_LDO12) >= 0)
+			break;
+		mdelay(10);
+	}
 	/* rails drop within ms; if we are still executing after 500 ms the write
 	 * was lost - fall through to the next handler (PSCI) as last resort */
 	mdelay(500);
@@ -68,6 +75,22 @@ static int pca9450_swrst_restart(struct notifier_block *nb, unsigned long action
 static struct notifier_block pca9450_swrst_nb = {
 	.notifier_call = pca9450_swrst_restart,
 	.priority = 192,	/* above PSCI (129): the rails must actually drop */
+};
+
+/* kernel_restart_prepare notifier (process context, before device_shutdown):
+ * pin the i2c controller runtime-active. Its runtime suspend does
+ * clk_disable_unprepare + sleep-state pads, and neither can be undone from the
+ * restart handler with interrupts off - the atomic xfer's bare clk_enable
+ * fails on an unprepared clock. Receipted 1/10: a suspended controller lost
+ * the SW_RST write and the reboot fell back to PSCI's eMMC lottery. */
+static int pca9450_swrst_prepare(struct notifier_block *nb, unsigned long action, void *data)
+{
+	pm_runtime_get_sync(pca9450_swrst_client->adapter->dev.parent);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block pca9450_swrst_prep_nb = {
+	.notifier_call = pca9450_swrst_prepare,
 };
 
 static const struct regmap_range pca9450_status_range = {
@@ -1140,6 +1163,7 @@ static int pca9450_i2c_probe(struct i2c_client *i2c)
 			dev_err(&i2c->dev, "Failed to register SW_RST restart handler: %d\n", ret);
 		else
 			dev_info(&i2c->dev, "reboot = SW_RST cold reset (rails recycle, #93)\n");
+		register_reboot_notifier(&pca9450_swrst_prep_nb);
 	}
 
 	/*
