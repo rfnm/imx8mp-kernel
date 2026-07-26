@@ -174,13 +174,11 @@ struct rfnm_dgb {
 	void * tx_ch_set;
 	void * tx_ch_get;
 
-	// optional analog RX DC trim (NULL if the dgb driver has none), board-native trim codes.
-	// Deliberately NOT part of the rx_ch struct: rfic_dc_i/q there are client-owned manual
-	// values (zero-skipped, clobbered by every apply memcpy) while this steers hardware state
-	// below the struct. AGC gain steps ride the normal rx_ch_set path instead, which every
-	// dgb driver must keep delta-optimized (skip unchanged stages, no side effects on a
-	// gain-only restep). Must be safe against a concurrent rx_ch_set (serialize internally).
-	int (*rx_dc_trim)(struct rfnm_dgb *dgb_dt, int ch_id, int dc_i, int dc_q);
+	// RX DC correction has NO hook here (2026-07-21 API ruling): the ONE public correction
+	// is the wire field pair rfic_dc_i/q (logical codes, +-126) and every path - client
+	// applies, sysfs, in-kernel measured loops via rfnm_dgb_rx_set_dc() - rides the normal
+	// rx_ch_set apply. How a daughterboard realizes the correction (one knob, several,
+	// cross-coupled) is its driver's internal business, like the LNA/PGA gain split.
 
 	uint8_t dac_ifs;
 	uint8_t adc_iqswap[2];
